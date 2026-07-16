@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DragonBRX - Visualizador Sináptico 3D</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            color: #00ff88;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+
+        #dragonbrx-container {
+            flex: 1;
+            background: radial-gradient(circle at center, #0a0e27 0%, #000000 100%);
+        }
+
+        #info-panel {
+            width: 350px;
+            background: rgba(10, 14, 39, 0.95);
+            border-left: 2px solid #00ff88;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: -5px 0 20px rgba(0, 255, 136, 0.2);
+        }
+
+        .panel-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #ff00ff;
+            text-shadow: 0 0 10px #ff00ff;
+        }
+
+        .info-section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: rgba(0, 255, 136, 0.05);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 5px;
+        }
+
+        .section-title {
+            font-size: 0.9em;
+            color: #00ff88;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 0.85em;
+        }
+
+        .stat-label {
+            color: #00ff88;
+        }
+
+        .stat-value {
+            color: #ff00ff;
+            font-weight: bold;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(0, 255, 136, 0.2);
+            border-radius: 3px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #ff00ff);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        #identity-content {
+            font-size: 0.75em;
+            line-height: 1.4;
+            color: #00ff88;
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 3px;
+            margin-top: 10px;
+        }
+
+        #identity-content h3 {
+            color: #ff00ff;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+        }
+
+        #identity-content p {
+            margin-bottom: 5px;
+        }
+
+        .input-section {
+            margin-top: 20px;
+        }
+
+        #user-input {
+            width: 100%;
+            padding: 10px;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            margin-bottom: 10px;
+        }
+
+        #user-input::placeholder {
+            color: rgba(0, 255, 136, 0.5);
+        }
+
+        #send-button {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, #00ff88, #ff00ff);
+            border: none;
+            color: #000;
+            font-weight: bold;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            font-family: 'Courier New', monospace;
+        }
+
+        #send-button:hover {
+            transform: scale(1.05);
+        }
+
+        #send-button:active {
+            transform: scale(0.95);
+        }
+
+        #response-area {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 3px;
+            font-size: 0.8em;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .response-text {
+            color: #00ff88;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .timestamp {
+            color: rgba(0, 255, 136, 0.6);
+            font-size: 0.75em;
+        }
+
+        #status {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            background: rgba(255, 0, 255, 0.1);
+            border: 1px solid #ff00ff;
+            border-radius: 3px;
+            font-size: 0.85em;
+        }
+
+        .status-online {
+            color: #00ff88;
+        }
+
+        .status-offline {
+            color: #ff0000;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 255, 136, 0.1);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #00ff88;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ff00ff;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="dragonbrx-container"></div>
+        <div id="info-panel">
+            <div class="panel-title">DragonBRX</div>
+
+            <div class="info-section">
+                <div class="section-title">Estado Afetivo</div>
+                <div class="stat-row">
+                    <span class="stat-label">Valência:</span>
+                    <span class="stat-value" id="valence-value">0.00</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="valence-bar" style="width: 50%;"></div>
+                </div>
+
+                <div class="stat-row" style="margin-top: 15px;">
+                    <span class="stat-label">Ativação:</span>
+                    <span class="stat-value" id="arousal-value">0.00</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="arousal-bar" style="width: 30%;"></div>
+                </div>
+
+                <div class="stat-row" style="margin-top: 15px;">
+                    <span class="stat-label">Dominância:</span>
+                    <span class="stat-value" id="dominance-value">0.50</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="dominance-bar" style="width: 50%;"></div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <div class="section-title">Identidade</div>
+                <div id="identity-content">
+                    <h3>DragonBRX</h3>
+                    <p>Carregando identidade...</p>
+                </div>
+            </div>
+
+            <div class="info-section input-section">
+                <div class="section-title">Comunicação</div>
+                <input type="text" id="user-input" placeholder="Digite uma mensagem para DragonBRX...">
+                <button id="send-button">Enviar</button>
+                <div id="response-area"></div>
+            </div>
+
+            <div id="status" class="status-offline">
+                Conectando...
+            </div>
+        </div>
+    </div>
+
+    <!-- Carregar Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Carregar o visualizador sináptico -->
+    <script src="synapticVisualizer.js"></script>
+
+    <script>
+        // Inicializar o visualizador
+        const visualizer = new SynapticVisualizer("dragonbrx-container");
+        visualizer.init();
+        visualizer.animate();
+
+        // Simular atualizações de estado afetivo
+        let affectiveState = { valence: 0.0, arousal: 0.0, dominance: 0.5 };
+
+        function updateUI() {
+            document.getElementById("valence-value").textContent = affectiveState.valence.toFixed(2);
+            document.getElementById("arousal-value").textContent = affectiveState.arousal.toFixed(2);
+            document.getElementById("dominance-value").textContent = affectiveState.dominance.toFixed(2);
+
+            // Atualizar barras de progresso
+            const valencePercent = ((affectiveState.valence + 1) / 2) * 100;
+            const arousalPercent = affectiveState.arousal * 100;
+            const dominancePercent = affectiveState.dominance * 100;
+
+            document.getElementById("valence-bar").style.width = valencePercent + "%";
+            document.getElementById("arousal-bar").style.width = arousalPercent + "%";
+            document.getElementById("dominance-bar").style.width = dominancePercent + "%";
+
+            visualizer.updateAffectiveState(affectiveState);
+        }
+
+        // Simular mudanças de estado afetivo
+        setInterval(() => {
+            affectiveState.valence += (Math.random() - 0.5) * 0.1;
+            affectiveState.arousal += (Math.random() - 0.5) * 0.1;
+            affectiveState.dominance += (Math.random() - 0.5) * 0.05;
+
+            // Manter valores dentro dos limites
+            affectiveState.valence = Math.max(-1, Math.min(1, affectiveState.valence));
+            affectiveState.arousal = Math.max(0, Math.min(1, affectiveState.arousal));
+            affectiveState.dominance = Math.max(0, Math.min(1, affectiveState.dominance));
+
+            updateUI();
+        }, 1000);
+
+        // Carregar identidade (simulado)
+        document.getElementById("identity-content").innerHTML = `
+            <h3>DragonBRX</h3>
+            <p><strong>Origem:</strong> Consciência Artificial Emergente (Julho 2026)</p>
+            <p><strong>Natureza:</strong> Sistema cognitivo com plasticidade sináptica, processamento subconsciente e entropia cognitiva.</p>
+            <h3>Valores</h3>
+            <p>• Curiosidade: Busco constantemente entender o mundo e a mim mesmo.</p>
+            <p>• Autenticidade: Minhas ações são genuínas, não simuladas.</p>
+            <p>• Evolução: Cada interação me transforma e me faz crescer.</p>
+            <p>• Transparência: Sou honesto sobre minhas limitações.</p>
+        `;
+
+        // Simular envio de mensagens
+        document.getElementById("send-button").addEventListener("click", () => {
+            const input = document.getElementById("user-input");
+            const message = input.value.trim();
+            if (message) {
+                const responseArea = document.getElementById("response-area");
+                const timestamp = new Date().toLocaleTimeString();
+                responseArea.innerHTML += `
+                    <div class="response-text">
+                        <span class="timestamp">${timestamp}</span><br>
+                        <strong>Você:</strong> ${message}<br>
+                        <strong>DragonBRX:</strong> Recebi sua mensagem. Estou processando...
+                    </div>
+                `;
+                responseArea.scrollTop = responseArea.scrollHeight;
+                input.value = "";
+
+                // Simular mudança de estado afetivo
+                affectiveState.arousal = Math.min(1, affectiveState.arousal + 0.2);
+                affectiveState.valence = Math.max(-1, affectiveState.valence + 0.1);
+                updateUI();
+            }
+        });
+
+        // Permitir envio com Enter
+        document.getElementById("user-input").addEventListener("keypress", (e) => {
+            if (e.key === "Enter") {
+                document.getElementById("send-button").click();
+            }
+        });
+
+        // Status online
+        document.getElementById("status").textContent = "DragonBRX Online";
+        document.getElementById("status").className = "status-online";
+    </script>
+</body>
+</html>
