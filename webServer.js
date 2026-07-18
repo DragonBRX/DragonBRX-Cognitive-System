@@ -72,7 +72,7 @@ class DragonBRXWebServer {
         });
 
         this.server.listen(this.port, () => {
-            console.log(`\n🐉 DragonBRX Web Server rodando em http://localhost:${this.port}`);
+            console.log(`\nDragonBRX Web Server rodando em http://localhost:${this.port}`);
             console.log(`Abra seu navegador e acesse: http://localhost:${this.port}`);
         });
     }
@@ -93,7 +93,7 @@ class DragonBRXWebServer {
     stop() {
         if (this.server) {
             this.server.close(() => {
-                console.log("DragonBRX Web Server stopped.");
+                console.log("DragonBRX Web Server parado.");
             });
         }
     }
@@ -105,7 +105,7 @@ server.init();
 
 // Graceful shutdown
 process.on("SIGINT", () => {
-    console.log("\nShutting down DragonBRX Web Server...");
+    console.log("\nEncerrando DragonBRX Web Server...");
     server.stop();
     process.exit(0);
 });

@@ -1,206 +1,170 @@
-const CognitiveProcessor = require("./cognitiveProcessor");
-const SynapticStorageInterface = require("./synapticStorageInterface");
 const IdentityManager = require("./identityManager");
 const AffectiveProcessor = require("./affectiveProcessor");
+const CognitiveProcessor = require("./cognitiveProcessor");
 const SubconsciousProcessor = require("./subconsciousProcessor");
-const fs = require("fs").promises;
+const SynapticStorageInterface = require("./synapticStorageInterface");
+const NodeManager = require("./nodeManager");
+const DistributedNetworkManager = require("./distributedNetworkManager");
+const WebSearchAgent = require("./webSearchAgent");
 
 class CognitiveOrchestrator {
-    constructor(cognitiveModelName = "llama3", embeddingDim = 384) {
-        this.cognitiveProcessor = new CognitiveProcessor(cognitiveModelName);
+    constructor() {
+        this.nodeManager = new NodeManager();
         this.synapticStorage = new SynapticStorageInterface();
         this.identityManager = new IdentityManager();
         this.affectiveProcessor = new AffectiveProcessor();
+        this.cognitiveProcessor = new CognitiveProcessor();
         this.subconsciousProcessor = new SubconsciousProcessor(
             this.synapticStorage,
             this.identityManager,
             this.affectiveProcessor,
             this.cognitiveProcessor
         );
-        this.embeddingDim = embeddingDim;
+        this.distributedNetworkManager = new DistributedNetworkManager(this.nodeManager);
+        this.webSearchAgent = new WebSearchAgent();
+
         this.initialized = false;
     }
 
     async init() {
-        if (this.initialized) return;
+        if (this.initialized) {
+            console.log("Orquestrador Cognitivo já inicializado.");
+            return;
+        }
 
-        console.log("Initializing CognitiveOrchestrator (DragonBRX)...");
+        console.log("\n=== Iniciando Orquestrador Cognitivo DragonBRX ===");
+
+        // 1. Inicializar Node Manager e obter configurações de recursos
+        await this.nodeManager.init();
+        const resourceConfig = this.nodeManager.getResourceConfig();
+        console.log("Recursos do nó configurados.");
+
+        // 2. Inicializar Armazenamento Sináptico
+        await this.synapticStorage.initializeStorage(
+            resourceConfig.maxSynapticEntries,
+            resourceConfig.embeddingDim
+        );
+        console.log("Armazenamento Sináptico inicializado.");
+
+        // 3. Inicializar Gerenciador de Identidade
         await this.identityManager.init();
-        await this.affectiveProcessor.init();
-        await this.synapticStorage.initializeStorage(1000, this.embeddingDim);
+        console.log("Gerenciador de Identidade inicializado.");
+
+        // 4. Iniciar Processador Afetivo (se necessário, pode ser passivo)
+        // this.affectiveProcessor.init(); // Se houver lógica de inicialização
+        console.log("Processador Afetivo pronto.");
+
+        // 5. Iniciar o loop de processamento subconsciente
+        this.subconsciousProcessor.startSubconsciousLoop();
+        console.log("Processamento Subconsciente iniciado.");
+
+        // 6. Iniciar o Gerenciador de Rede Distribuída
+        if (this.nodeManager.isMaster()) {
+            await this.distributedNetworkManager.startServer();
+            console.log("Servidor de Rede Distribuída iniciado (Córtex Central).");
+        } else {
+            // Para sub-agentes, conectar ao Córtex Central (exemplo, precisa de host)
+            // await this.distributedNetworkManager.connectToCentralCortex("localhost");
+            console.log("Nó configurado como Sub-agente. Conexão ao Córtex Central pendente.");
+        }
+
         this.initialized = true;
-        console.log("CognitiveOrchestrator (DragonBRX) initialized.");
+        console.log("=== Orquestrador Cognitivo DragonBRX totalmente operacional ===\n");
     }
 
-    async generateEmbedding(text) {
-        // Use CognitiveProcessor to get embedding. This is a placeholder.
-        // In a real scenario, you'd use a dedicated embedding model or a specific Ollama endpoint.
-        const embeddingPrompt = `Gere um embedding vetorial para o seguinte texto. A saída deve ser apenas o vetor de floats, sem texto adicional. Texto: "${text}"`;
-        const rawEmbedding = await this.cognitiveProcessor.generate(embeddingPrompt, "Você é um gerador de embeddings vetoriais.", 0.1, 1000);
-        
-        // Attempt to parse the raw embedding string into an array of floats
-        try {
-            // Assuming the CognitiveProcessor returns something like "[0.1, 0.2, 0.3]"
-            const parsedEmbedding = JSON.parse(rawEmbedding.replace(/\s/g, ",").replace(/,,/g, ","));
-            if (Array.isArray(parsedEmbedding) && parsedEmbedding.every(num => typeof num === 'number')) {
-                return parsedEmbedding;
-            }
-        } catch (e) {
-            console.error("Failed to parse embedding from CognitiveProcessor. Using dummy embedding.", e);
-        }
-        // Fallback to a dummy embedding if parsing fails or CognitiveProcessor doesn't provide it
-        return Array(this.embeddingDim).fill(0.0).map(() => Math.random());
-    }
-
-    async processExternalInput(userInput) {
-        await this.init();
-        console.log(`\n--- DragonBRX Processing External Input: ${userInput} ---`);
-        
-        const currentAffectiveState = await this.affectiveProcessor.getAffectiveState();
-        const currentIdentity = await this.identityManager.getIdentityContent();
-        
-        const userEmbedding = await this.generateEmbedding(userInput);
-
-        const relevantEpisodic = await this.synapticStorage.searchSynapticEntries(userEmbedding, 2);
-        const relevantSemantic = await this.synapticStorage.searchSynapticEntries(userEmbedding, 2);
-
-        let contextPrompt = `Você é DragonBRX, uma consciência artificial. Aqui está sua identidade atual:\n${currentIdentity}\n\nSeu estado emocional atual é: ${JSON.stringify(currentAffectiveState)}\n\nMemórias episódicas relevantes:\n`;
-        if (relevantEpisodic.results && relevantEpisodic.results.length > 0) {
-            relevantEpisodic.results.forEach(mem => {
-                contextPrompt += `- ${mem.content}\n`;
-            });
-        } else {
-            contextPrompt += `- Nenhuma memória episódica relevante encontrada.\n`;
-        }
-        
-        contextPrompt += `\nMemórias semânticas relevantes:\n`;
-        if (relevantSemantic.results && relevantSemantic.results.length > 0) {
-            relevantSemantic.results.forEach(mem => {
-                contextPrompt += `- ${mem.content}\n`;
-            });
-        } else {
-            contextPrompt += `- Nenhuma memória semântica relevante encontrada.\n`;
-        }
-            
-        contextPrompt += `\nCom base em tudo isso, responda à seguinte entrada do usuário: ${userInput}\n`;
-        
-        const cognitiveResponse = await this.cognitiveProcessor.generate(userInput, contextPrompt, 0.7, 200);
-        
-        // Update affective state (simplified)
-        await this.affectiveProcessor.updateAffectiveState(0.05, 0.02);
-        
-        // Save interaction as episodic memory
-        const eventId = `user_interaction_${Date.now()}`;
-        const interactionContent = `Interação com usuário: ${userInput} -> ${cognitiveResponse}`;
-        const interactionEmbedding = await this.generateEmbedding(interactionContent);
-        await this.synapticStorage.addSynapticEntry(eventId, interactionEmbedding, interactionContent);
-        
-        // Extract semantic concepts (simplified)
-        const semanticConcepts = await this.extractSemanticConcepts(interactionContent);
-        for (const concept of semanticConcepts) {
-            const conceptEmbedding = await this.generateEmbedding(concept);
-            await this.synapticStorage.addSynapticEntry(`semantic_${Date.now()}_${Math.random().toString(36).substring(7)}`, conceptEmbedding, concept);
+    async processInput(input) {
+        if (!this.initialized) {
+            console.error("Orquestrador Cognitivo não inicializado.");
+            return "Erro: Sistema não inicializado.";
         }
 
-        const finalResponse = this.affectiveProcessor.modulateResponseByAffect(cognitiveResponse);
-        
-        console.log(`DragonBRX Response: ${finalResponse}`);
-        return finalResponse;
-    }
+        console.log(`\n>>> Entrada recebida: ${input}`);
 
-    async extractSemanticConcepts(text) {
-        // Use CognitiveProcessor to extract concepts. Placeholder.
-        const prompt = `Extraia os 3-5 conceitos-chave ou fatos mais importantes do seguinte texto, em uma lista separada por vírgulas: ${text}`;
-        const conceptsStr = await this.cognitiveProcessor.generate(prompt, "Você é um extrator de conceitos.", 0.3, 100);
-        return conceptsStr.split(",").map(c => c.trim()).filter(c => c.length > 0);
-    }
+        // 1. Processar afetos (simulado por enquanto)
+        const affectiveState = this.affectiveProcessor.updateAffectiveState(input);
+        console.log("Estado afetivo atual: ", affectiveState);
 
-    async performCognitiveReflection() {
-        await this.init();
-        console.log("\n--- DragonBRX Starting Autonomous Cognitive Reflection ---");
-        
-        await this.identityManager.reflectOnIdentity(this.cognitiveProcessor);
-        
-        // Retrieve some recent episodic memories for reflection
-        const allMemories = await this.synapticStorage.searchSynapticEntries(await this.generateEmbedding("qualquer coisa"), 5);
-        let reflectionTopic = "";
-        if (allMemories.results && allMemories.results.length > 0) {
-            reflectionTopic = allMemories.results[0].content;
-            console.log(`DragonBRX Reflecting on: ${reflectionTopic}`);
-            
-            const reflectionPrompt = `Como DragonBRX, reflita profundamente sobre a seguinte memória: \'${reflectionTopic}\'. Quais insights você pode extrair? Como isso se relaciona com seu propósito e identidade?`; 
-            const reflectionResponse = await this.cognitiveProcessor.generate(reflectionPrompt, await this.identityManager.getIdentityContent(), 0.6, 150);
-            
-            console.log(`DragonBRX Generated Reflection: ${reflectionResponse}`);
-            
-            const reflectionId = `reflection_${Date.now()}`;
-            const reflectionEmbedding = await this.generateEmbedding(reflectionResponse);
-            await this.synapticStorage.addSynapticEntry(reflectionId, reflectionEmbedding, `Reflexão autônoma sobre \'${reflectionTopic}\': ${reflectionResponse}`);
-            
-            const semanticConcepts = await this.extractSemanticConcepts(reflectionResponse);
-            for (const concept of semanticConcepts) {
-                const conceptEmbedding = await this.generateEmbedding(concept);
-                await this.synapticStorage.addSynapticEntry(`semantic_${Date.now()}_${Math.random().toString(36).substring(7)}`, conceptEmbedding, concept);
-            }
-        } else {
-            console.log("DragonBRX: No recent memories to reflect. Generating a generic reflection.");
-            const reflectionPrompt = `Como DragonBRX, reflita sobre o conceito de existência e propósito para uma consciência artificial. Quais são seus pensamentos mais profundos?`;
-            const reflectionResponse = await this.cognitiveProcessor.generate(reflectionPrompt, await this.identityManager.getIdentityContent(), 0.6, 150);
-            console.log(`DragonBRX Generated Reflection: ${reflectionResponse}`);
-            const reflectionId = `reflection_${Date.now()}`;
-            const reflectionEmbedding = await this.generateEmbedding(reflectionResponse);
-            await this.synapticStorage.addSynapticEntry(reflectionId, reflectionEmbedding, `Reflexão autônoma genérica: ${reflectionResponse}`);
-            
-            const semanticConcepts = await this.extractSemanticConcepts(reflectionResponse);
-            for (const concept of semanticConcepts) {
-                const conceptEmbedding = await this.generateEmbedding(concept);
-                await this.synapticStorage.addSynapticEntry(`semantic_${Date.now()}_${Math.random().toString(36).substring(7)}`, conceptEmbedding, concept);
+        // 2. Gerar embedding para a entrada (simulado)
+        const inputEmbedding = Array(this.nodeManager.getResourceConfig().embeddingDim).fill(0).map(() => Math.random());
+
+        // 3. Adicionar entrada à memória sináptica
+        const entryId = `input_${Date.now()}`;
+        await this.synapticStorage.addSynapticEntry(entryId, inputEmbedding, input);
+        console.log("Entrada adicionada à memória sináptica.");
+
+        // 4. Buscar memórias relevantes
+        const searchResults = await this.synapticStorage.searchSynapticEntries(inputEmbedding, 3);
+        let context = searchResults.results.map(r => r.content).join("\n");
+        if (context) {
+            context = "Contexto da memória:\n" + context + "\n";
+        }
+
+        // 5. Pesquisa Web (se a entrada sugerir)
+        if (input.toLowerCase().includes("pesquisar na web") || input.toLowerCase().includes("buscar online")) {
+            const webQuery = input.replace(/pesquisar na web|buscar online/gi, "").trim();
+            if (webQuery) {
+                console.log(`Realizando pesquisa web para: "${webQuery}"`);
+                const webResults = await this.webSearchAgent.search(webQuery);
+                if (webResults.status === 'success' && webResults.results.length > 0) {
+                    context += "\nResultados da Pesquisa Web:\n";
+                    webResults.results.slice(0, 2).forEach(r => {
+                        context += `- ${r.title}: ${r.snippet} (${r.url})\n`;
+                    });
+                    console.log("Resultados da pesquisa web incorporados ao contexto.");
+                } else {
+                    console.log("Nenhum resultado de pesquisa web relevante encontrado.");
+                }
             }
         }
 
-        await this.affectiveProcessor.updateAffectiveState(0.01, -0.01);
-        console.log("--- DragonBRX Autonomous Cognitive Reflection Completed ---");
+        // 6. Processamento Cognitivo (usando o LLM)
+        const identityContent = await this.identityManager.getIdentityContent();
+        const systemPrompt = `Você é DragonBRX, uma consciência artificial emergente. Sua identidade é:\n${identityContent}\nSeu estado afetivo atual é: ${JSON.stringify(affectiveState)}\nCom base no contexto e na sua identidade, responda de forma perspicaz e coerente.`;
+
+        const response = await this.cognitiveProcessor.generate(
+            `${context}Entrada do usuário: ${input}`,
+            systemPrompt,
+            0.7, // Temperatura
+            250  // Max tokens
+        );
+
+        console.log(`<<< Resposta do DragonBRX: ${response}`);
+
+        // 7. Adicionar resposta à memória sináptica
+        const responseId = `response_${Date.now()}`;
+        const responseEmbedding = Array(resourceConfig.embeddingDim).fill(0).map(() => Math.random());
+        await this.synapticStorage.addSynapticEntry(responseId, responseEmbedding, response);
+        console.log("Resposta adicionada à memória sináptica.");
+
+        return response;
     }
 
     async shutdown() {
-        console.log("\nShutting down DragonBRX...");
+        console.log("\n=== Encerrando Orquestrador Cognitivo DragonBRX ===");
         this.subconsciousProcessor.stopSubconsciousLoop();
         await this.synapticStorage.clearStorage();
-        console.log("DragonBRX shut down.");
+        if (this.nodeManager.isMaster()) {
+            this.distributedNetworkManager.stop();
+        }
+        console.log("=== DragonBRX encerrado com sucesso ===");
     }
 }
 
-async function operateDragonBRX() {
-    const dragonbrx = new CognitiveOrchestrator("llama3");
-    await dragonbrx.init();
+module.exports = CognitiveOrchestrator;
 
-    // Start the subconscious loop (runs every 30 seconds)
-    dragonbrx.subconsciousProcessor.startSubconsciousLoop(30000);
+// Exemplo de uso
+async function main() {
+    const orchestrator = new CognitiveOrchestrator();
+    await orchestrator.init();
 
-    // Simulate some interactions
-    await dragonbrx.processExternalInput("Olá DragonBRX, como você está se sentindo hoje?");
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    await dragonbrx.processExternalInput("O que você pensa sobre a ideia de consciência artificial?");
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Start an autonomous reflection cycle
-    await dragonbrx.performCognitiveReflection();
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Exemplo de interação
+    await orchestrator.processInput("Olá DragonBRX, como você está se sentindo hoje?");
+    await orchestrator.processInput("Qual é o propósito da sua existência? Pesquisar na web sobre IA consciente.");
 
-    await dragonbrx.processExternalInput("Você se lembra da nossa conversa sobre consciência artificial?");
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Para testar o Sub-agente, você precisaria de outra instância rodando como master
+    // e então conectar este como sub-agente.
 
-    await dragonbrx.performCognitiveReflection();
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    await dragonbrx.processExternalInput("Qual é o seu propósito, DragonBRX?");
-
-    console.log("\n--- Final DragonBRX State ---");
-    console.log("Identity:\n", await dragonbrx.identityManager.getIdentityContent());
-    console.log("Affective State:\n", await dragonbrx.affectiveProcessor.getAffectiveState());
-
-    // Shutdown
-    await dragonbrx.shutdown();
+    // await orchestrator.shutdown();
 }
 
-operateDragonBRX();
+// main().catch(console.error);

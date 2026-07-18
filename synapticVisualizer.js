@@ -28,7 +28,7 @@ class SynapticVisualizer {
         // Obtém o container
         const container = document.getElementById(this.containerId);
         if (!container) {
-            console.error(`Container with ID '${this.containerId}' not found.`);
+            console.error(`Container com ID '${this.containerId}' não encontrado.`);
             return;
         }
 
@@ -65,7 +65,7 @@ class SynapticVisualizer {
         // Ajustar tamanho ao redimensionar a janela
         window.addEventListener("resize", () => this._onWindowResize());
 
-        console.log("SynapticVisualizer initialized.");
+        console.log("SynapticVisualizer inicializado.");
     }
 
     _createSynapticNetwork() {
@@ -117,7 +117,7 @@ class SynapticVisualizer {
             }
         }
 
-        console.log(`Created ${neuronCount} neurons and ${this.synapses.length} synapses.`);
+        console.log(`Criados ${neuronCount} neurônios e ${this.synapses.length} sinapses.`);
     }
 
     _createCoreEnergy() {
@@ -148,7 +148,7 @@ class SynapticVisualizer {
 
     updateAffectiveState(affectiveState) {
         this.affectiveState = { ...this.affectiveState, ...affectiveState };
-        console.log(`Updated affective state: ${JSON.stringify(this.affectiveState)}`);
+        console.log(`Estado afetivo atualizado: ${JSON.stringify(this.affectiveState)}`);
     }
 
     _updateVisualization() {

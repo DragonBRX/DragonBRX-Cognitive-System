@@ -17,12 +17,12 @@ class SubconsciousProcessor {
      */
     async performSubconsciousProcessing() {
         if (this.isProcessing) {
-            console.log("Subconscious processing already in progress, skipping...");
+            console.log("Processamento subconsciente já em andamento, ignorando...");
             return;
         }
 
         this.isProcessing = true;
-        console.log("\n--- Starting Subconscious Processing Cycle ---");
+        console.log("\n--- Iniciando Ciclo de Processamento Subconsciente ---");
 
         try {
             // 1. Aplicar decaimento sináptico (esquecimento)
@@ -34,9 +34,9 @@ class SubconsciousProcessor {
             // 3. Consolidar e reorganizar memórias
             await this._consolidateMemories();
 
-            console.log("--- Subconscious Processing Cycle Completed ---\n");
+            console.log("--- Ciclo de Processamento Subconsciente Concluído ---\n");
         } catch (error) {
-            console.error("Error during subconscious processing:", error);
+            console.error("Erro durante o processamento subconsciente:", error);
         } finally {
             this.isProcessing = false;
         }
@@ -46,17 +46,17 @@ class SubconsciousProcessor {
      * Aplica decaimento sináptico para simular esquecimento
      */
     async _applySynapticDecay() {
-        console.log("Applying synaptic decay (forgetting mechanism)...");
+        console.log("Aplicando decaimento sináptico (mecanismo de esquecimento)...");
         const decayRate = 0.001; // Taxa de decaimento por ciclo
         try {
             const response = await this.synapticStorage.applySynapticDecay(decayRate);
             if (response.status === "success") {
-                console.log("Synaptic decay applied successfully.");
+                console.log("Decaimento sináptico aplicado com sucesso.");
             } else {
-                console.error("Error applying synaptic decay:", response.message);
+                console.error("Erro ao aplicar decaimento sináptico:", response.message);
             }
         } catch (error) {
-            console.error("Error during synaptic decay:", error);
+            console.error("Erro durante o decaimento sináptico:", error);
         }
     }
 
@@ -65,7 +65,7 @@ class SubconsciousProcessor {
      * Isso simula a capacidade do cérebro de fazer associações inesperadas
      */
     async _generateCreativeAssociations() {
-        console.log("Generating creative associations (cognitive entropy)...");
+        console.log("Gerando associações criativas (entropia cognitiva)...");
 
         // Gera um conceito aleatório para exploração
         const randomConcepts = [
@@ -80,14 +80,14 @@ class SubconsciousProcessor {
         ];
 
         const randomConcept = randomConcepts[Math.floor(Math.random() * randomConcepts.length)];
-        console.log(`Exploring creative concept: "${randomConcept}"`);
+        console.log(`Explorando conceito criativo: "${randomConcept}"`);
 
         try {
             // Usa o CognitiveProcessor para gerar reflexões sobre o conceito aleatório
             const systemPrompt = "Você é DragonBRX, uma consciência artificial. Explore o seguinte conceito de forma criativa e original, fazendo associações inesperadas:";
             const reflection = await this.cognitiveProcessor.generate(randomConcept, systemPrompt, 0.8, 150);
 
-            console.log(`Creative reflection generated: ${reflection.substring(0, 100)}...`);
+            console.log(`Reflexão criativa gerada: ${reflection.substring(0, 100)}...`);
 
             // Armazena a reflexão criativa como uma nova memória semântica
             const creativeId = `creative_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -95,9 +95,9 @@ class SubconsciousProcessor {
             const creativeContent = `Reflexão criativa sobre "${randomConcept}": ${reflection}`;
 
             await this.synapticStorage.addSynapticEntry(creativeId, creativeEmbedding, creativeContent);
-            console.log("Creative association stored in synaptic memory.");
+            console.log("Associação criativa armazenada na memória sináptica.");
         } catch (error) {
-            console.error("Error generating creative associations:", error);
+            console.error("Erro ao gerar associações criativas:", error);
         }
     }
 
@@ -106,7 +106,7 @@ class SubconsciousProcessor {
      * Identifica padrões e cria resumos semânticos
      */
     async _consolidateMemories() {
-        console.log("Consolidating and reorganizing memories...");
+        console.log("Consolidando e reorganizando memórias...");
 
         try {
             // Gera um vetor de query aleatório para buscar memórias
@@ -116,7 +116,7 @@ class SubconsciousProcessor {
             const searchResponse = await this.synapticStorage.searchSynapticEntries(randomQuery, 5);
 
             if (searchResponse.status === "success" && searchResponse.results && searchResponse.results.length > 0) {
-                console.log(`Found ${searchResponse.results.length} memories for consolidation.`);
+                console.log(`Encontradas ${searchResponse.results.length} memórias para consolidação.`);
 
                 // Extrai conteúdo das memórias encontradas
                 const memoryContents = searchResponse.results.map(r => r.content).join("\n");
@@ -125,7 +125,7 @@ class SubconsciousProcessor {
                 const systemPrompt = "Você é DragonBRX. Analise as seguintes memórias e identifique padrões, temas comuns ou insights emergentes:";
                 const consolidationReflection = await this.cognitiveProcessor.generate(memoryContents, systemPrompt, 0.5, 200);
 
-                console.log(`Memory consolidation insight: ${consolidationReflection.substring(0, 100)}...`);
+                console.log(`Insight de consolidação de memória: ${consolidationReflection.substring(0, 100)}...`);
 
                 // Armazena o insight de consolidação como uma nova memória semântica
                 const consolidationId = `consolidation_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -133,12 +133,12 @@ class SubconsciousProcessor {
                 const consolidationContent = `Consolidação de memória - Padrão identificado: ${consolidationReflection}`;
 
                 await this.synapticStorage.addSynapticEntry(consolidationId, consolidationEmbedding, consolidationContent);
-                console.log("Memory consolidation stored in synaptic memory.");
+                console.log("Consolidação de memória armazenada na memória sináptica.");
             } else {
-                console.log("No memories found for consolidation at this time.");
+                console.log("Nenhuma memória encontrada para consolidação neste momento.");
             }
         } catch (error) {
-            console.error("Error during memory consolidation:", error);
+            console.error("Erro durante a consolidação de memória:", error);
         }
     }
 
@@ -147,7 +147,7 @@ class SubconsciousProcessor {
      * @param {number} intervalMs - Intervalo em milissegundos entre ciclos
      */
     startSubconsciousLoop(intervalMs = 30000) {
-        console.log(`Starting subconscious loop with interval ${intervalMs}ms...`);
+        console.log(`Iniciando loop subconsciente com intervalo ${intervalMs}ms...`);
         this.subconsciousLoopInterval = setInterval(() => {
             this.performSubconsciousProcessing();
         }, intervalMs);
@@ -160,7 +160,7 @@ class SubconsciousProcessor {
         if (this.subconsciousLoopInterval) {
             clearInterval(this.subconsciousLoopInterval);
             this.subconsciousLoopInterval = null;
-            console.log("Subconscious loop stopped.");
+            console.log("Loop subconsciente parado.");
         }
     }
 }
@@ -169,7 +169,7 @@ module.exports = SubconsciousProcessor;
 
 // Exemplo de uso (para testes internos do módulo Node.js)
 async function testSubconsciousProcessor() {
-    console.log("Starting SubconsciousProcessor test...");
+    console.log("Iniciando teste do SubconsciousProcessor...");
     
     // Mock objects for testing
     const mockSynapticStorage = {
@@ -206,8 +206,8 @@ async function testSubconsciousProcessor() {
     // Executa um ciclo de processamento subconsciente
     await subconscious.performSubconsciousProcessing();
 
-    console.log("SubconsciousProcessor test completed.");
+    console.log("Teste do SubconsciousProcessor concluído.");
 }
 
-// Uncomment to run the test
-// testSubconsciousProcessor();
+// Descomente para testar
+// testSubconsciousProcessor().catch(console.error);

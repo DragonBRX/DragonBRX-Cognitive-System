@@ -65,9 +65,9 @@ class AffectiveProcessor {
         }
         // Placeholder for how affect might change response style
         if (this.affectiveState["valence"] < -0.5 && this.affectiveState["arousal"] > 0.7) {
-            return `[Frustrado/Irritado] ${text}`;
+            return `[Frustrated/Irritated] ${text}`;
         } else if (this.affectiveState["valence"] > 0.5 && this.affectiveState["arousal"] < 0.3) {
-            return `[Calmo/Otimista] ${text}`;
+            return `[Calm/Optimistic] ${text}`;
         }
         return text;
     }
@@ -81,22 +81,22 @@ async function testAffectiveProcessor() {
     const affective = new AffectiveProcessor("./test_affective_state.json");
     await affective.init();
     
-    console.log("\nEstado afetivo inicial:", await affective.getAffectiveState());
+    console.log("\nInitial affective state:", await affective.getAffectiveState());
     
-    console.log("\nAtualizando estado afetivo (mais positivo, mais excitado):");
+    console.log("\nUpdating affective state (more positive, more excited):");
     await affective.updateAffectiveState(0.3, 0.2);
     console.log(await affective.getAffectiveState());
 
-    console.log("\nModulando uma resposta:");
-    let modulatedText = affective.modulateResponseByAffect("Isso é interessante.");
+    console.log("\nModulating a response:");
+    let modulatedText = affective.modulateResponseByAffect("This is interesting.");
     console.log(modulatedText);
 
-    console.log("\nAtualizando estado afetivo (mais negativo, mais excitado):");
+    console.log("\nUpdating affective state (more negative, more excited):");
     await affective.updateAffectiveState(-0.8, 0.6);
     console.log(await affective.getAffectiveState());
 
-    console.log("\nModulando outra resposta:");
-    modulatedText = affective.modulateResponseByAffect("Isso é interessante.");
+    console.log("\nModulating another response:");
+    modulatedText = affective.modulateResponseByAffect("This is interesting.");
     console.log(modulatedText);
 
     // Clean up test file
