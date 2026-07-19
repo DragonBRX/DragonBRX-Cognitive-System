@@ -1,11 +1,15 @@
 import sys
 from lexer import Lexer
+from visual import BRXVEngine
+import time
 
 class BRXInterpreter:
     def __init__(self):
         self.variables = {}
         self.pos = 0
         self.tokens = []
+        self.visual = BRXVEngine()
+        self.current_win_props = {}
 
     def error(self, msg):
         token = self.tokens[self.pos] if self.pos < len(self.tokens) else self.tokens[-1]
@@ -52,6 +56,18 @@ class BRXInterpreter:
                 self.handle_if()
             elif token.value == 'loop':
                 self.handle_loop()
+            elif token.value == 'win':
+                self.handle_win()
+            elif token.value == 'upd':
+                self.visual.update_sprites()
+                self.pos += 1
+            elif token.value == 'drw':
+                self.visual.render()
+                self.pos += 1
+            elif token.value == 'wait':
+                self.pos += 1
+                ms = self.evaluate_expression()
+                time.sleep(ms / 1000.0)
             elif token.value == 'end':
                 self.pos += 1 # end handled by blocks
             else:
@@ -92,6 +108,99 @@ class BRXInterpreter:
         value = self.evaluate_expression()
         print(value)
 
+    def handle_win(self):
+        self.consume('KEYWORD', 'win')
+        props = {'sz': '800x600', 'tt': 'BRX Window', 'bg': '#1a1a2e'}
+        
+        while self.pos < len(self.tokens):
+            t = self.peek()
+            if t.type == 'KEYWORD' and t.value == 'end':
+                self.consume('KEYWORD', 'end')
+                break
+            
+            if t.type == 'KEYWORD':
+                if t.value == 'sz':
+                    self.consume('KEYWORD')
+                    props['sz'] = self.consume().value
+                elif t.value == 'tt':
+                    self.consume('KEYWORD')
+                    props['tt'] = self.consume().value
+                elif t.value == 'bg':
+                    self.consume('KEYWORD')
+                    props['bg'] = self.consume().value
+                elif t.value == 'txt':
+                    self.handle_win_txt()
+                elif t.value == 'btn':
+                    self.handle_win_btn()
+                elif t.value == 'spr':
+                    self.handle_win_spr()
+                elif t.value == 'rect':
+                    self.handle_win_rect()
+                else:
+                    self.pos += 1
+            else:
+                self.pos += 1
+        
+        w, h = map(int, props['sz'].split('x'))
+        self.visual.init_window(w, h, props['tt'], props['bg'])
+
+    def handle_win_txt(self):
+        self.consume('KEYWORD', 'txt')
+        text = self.evaluate_expression()
+        opts = self.parse_opts()
+        self.visual.add_text(text, opts.get('x', 0), opts.get('y', 0), opts.get('sz', 16), opts.get('col', '#FFFFFF'))
+
+    def handle_win_btn(self):
+        self.consume('KEYWORD', 'btn')
+        text = self.evaluate_expression()
+        opts = self.parse_opts()
+        # For bootstrap, button callback is simple cls
+        self.visual.add_button(text, opts.get('x', 0), opts.get('y', 0), opts.get('w', 80), opts.get('h', 30), self.visual.on_close)
+        # Skip until end of btn block
+        while self.pos < len(self.tokens):
+            if self.peek().value == 'end':
+                self.consume('KEYWORD', 'end')
+                break
+            self.pos += 1
+
+    def handle_win_spr(self):
+        self.consume('KEYWORD', 'spr')
+        path = self.evaluate_expression()
+        opts = self.parse_opts()
+        sprite = self.visual.add_sprite(path, opts.get('x', 0), opts.get('y', 0), opts.get('w', 40), opts.get('h', 40), opts.get('col', '#FF0000'))
+        
+        # Check for vel sub-block
+        while self.pos < len(self.tokens):
+            t = self.peek()
+            if t.value == 'end':
+                self.consume('KEYWORD', 'end')
+                break
+            if t.value == 'vel':
+                self.consume('KEYWORD')
+                vopts = self.parse_opts()
+                sprite['vx'] = vopts.get('x', 0)
+                sprite['vy'] = vopts.get('y', 0)
+            else:
+                self.pos += 1
+
+    def handle_win_rect(self):
+        self.consume('KEYWORD', 'rect')
+        opts = self.parse_opts()
+        self.visual.add_rect(opts.get('x', 0), opts.get('y', 0), opts.get('w', 100), opts.get('h', 100), opts.get('col', '#FFFFFF'))
+
+    def parse_opts(self):
+        opts = {}
+        while self.pos < len(self.tokens):
+            t = self.peek()
+            if t.type == 'KEYWORD' and t.value in ['x', 'y', 'z', 'sz', 'col', 'w', 'h', 'vel']:
+                key = self.consume().value
+                self.consume('COLON')
+                val = self.evaluate_expression()
+                opts[key] = val
+            else:
+                break
+        return opts
+
     def handle_if(self):
         self.consume('KEYWORD', 'if')
         condition = self.evaluate_expression()
@@ -126,6 +235,25 @@ class BRXInterpreter:
         self.consume('KEYWORD', 'loop')
         token = self.peek()
         
+        # loop while win.open
+        if token.value == 'while':
+            self.consume('KEYWORD', 'while')
+            cond_tokens = []
+            # Peek until we find a newline or block start equivalent
+            # For bootstrap, we assume loop while win.open
+            expr_str = ""
+            while self.peek().type != 'NEWLINE' and self.peek().value not in ['upd', 'drw', 'wait', 'out', 'var', 'if', 'loop']:
+                t = self.consume()
+                expr_str += str(t.value)
+            
+            loop_body = self.collect_block()
+            
+            # Simple simulation for loop while win.open
+            if "win.open" in expr_str:
+                while self.visual.is_open:
+                    self.run_sub_tokens(loop_body)
+            return
+
         # loop i:0 to 10
         if token.type == 'ID':
             var_name = self.consume('ID').value

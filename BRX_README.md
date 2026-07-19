@@ -1,50 +1,46 @@
-# Ecossistema BRX — Dragon Projects BR
+# BRX Ecosystem — Dragon Projects BR
 
-O **BRX** é um ecossistema de linguagens de programação e ferramentas de execução projetado para ser **totalmente autossuficiente** e nativo. Ele substitui a dependência de runtimes e compiladores externos por uma arquitetura integrada de sete camadas especializadas.
-
-## 🚀 Filosofia do Projeto
-
-1.  **Autossuficiência Total:** O BRX não depende de ferramentas externas (Python, Node.js, GCC, etc.) para rodar em produção.
-2.  **Nacionalidade Digital:** O formato `.brx` é registrado no Sistema Operacional como um executável nativo.
-3.  **Sintaxe Universal:** Abreviações curtas e intuitivas (`var`, `if`, `loop`, `win`) independentes de idioma humano.
-4.  **Interoperabilidade sem Dependência:** Pode integrar com outras linguagens, mas nunca *precisa* delas para funcionar.
+O **BRX** é um ecossistema de linguagens de programação projetado para ser **totalmente autossuficiente**. Ele é composto por sete camadas especializadas, cada uma resolvendo uma parte específica do desenvolvimento.
 
 ## 🏗️ As Sete Camadas
 
-| Sigla | Camada | Função | Substitui hoje |
+| Sigla | Camada | Função | Status no Bootstrap |
 | :--- | :--- | :--- | :--- |
-| **BRXE** | Easy | Sintaxe simples de alto nível | Python, Ruby |
-| **BRXV** | Visual | Janelas, UI, apps gráficos | Qt, Electron, GTK |
-| **BRXR** | Runtime | Execução em tempo real | JVM, Node.js, CPython |
-| **BRXB** | Binary | Geração do executável final | GCC, Clang, linkers |
-| **BRXH** | Hardware | Acesso direto ao processador | Assembly, Drivers |
-| **BRXS** | Sandbox | Execução isolada e segura | Containers, VMs |
-| **BRXT** | Translate | Tradução de binários externos | Proton, Wine |
+| **BRXE** | Easy | Lógica de alto nível (Python-like) | **Funcional** |
+| **BRXV** | Visual | Interface gráfica e jogos (Tkinter) | **Funcional** |
+| **BRXR** | Runtime | Loop de execução em tempo real | **Funcional** |
+| **BRXB** | Binary | Geração de executáveis finais | Planejado |
+| **BRXH** | Hardware | Acesso direto ao processador | Planejado |
+| **BRXS** | Sandbox | Execução isolada e segura | Planejado |
+| **BRXT** | Translate | Tradução de binários externos | Planejado |
 
-## 🛠️ Como testar (Fase de Bootstrap)
+## 🛠️ Como usar (Fase de Bootstrap)
 
-Atualmente, o projeto está em fase de **bootstrap**. Isso significa que utilizamos ferramentas temporárias (como Python) para construir os primeiros compiladores que, futuramente, serão reescritos em BRX.
+Atualmente, o interpretador unificado está em `src/interpreter.py`.
 
-### Requisitos
-- Python 3.x (apenas para a fase de bootstrap)
-- VS Code (recomendado)
-
-### Executando um arquivo .brx
-Para rodar um exemplo da camada BRXE:
+### Rodando um exemplo visual:
 ```bash
-python3 brxe/brxe_interpreter.py exemplos/ola_mundo.brx
+python3 src/interpreter.py examples/animacao.brx
+```
+
+### Exemplo de Sintaxe (BRXV + BRXR):
+```brx
+run "meu_app"
+
+win
+  sz 800x600
+  tt "Janela BRX"
+  spr "logo.png" x:100 y:100
+    vel x:2 y:0
+  end
+end
+
+loop while win.open
+  upd
+  drw
+  wait 16
+end
 ```
 
 ## 📄 Licença
-Este projeto está sob a licença **MIT**. Veja o arquivo `LICENSE` para detalhes.
-
-## 💻 Integração com VS Code
-
-Para facilitar o desenvolvimento no VS Code:
-1. Abra a pasta do projeto no VS Code.
-2. Para rodar um arquivo `.brx` ou `.brxe`:
-   - Pressione `Ctrl+Shift+B` (ou `Cmd+Shift+B` no Mac).
-   - Selecione **BRX: Rodar Arquivo Atual**.
-3. O resultado aparecerá no terminal integrado.
-
-> **Nota:** O reconhecimento de sintaxe completo via extensão oficial está em desenvolvimento. Por enquanto, o VS Code usará as configurações básicas incluídas na pasta `.vscode`.
+Este projeto está sob a licença **MIT**.

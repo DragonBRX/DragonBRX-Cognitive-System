@@ -1,0 +1,28 @@
+run "animacao"
+
+# Camada Visual (BRXV)
+win
+  sz 800x600
+  tt "BRX Animacao"
+  bg "#1a1a2e"
+  
+  txt "BRX Ecosystem" x:300 y:20 sz:24 col:"#00FF00"
+  
+  # Sprite simulado (retangulo vermelho se imagem nao existir)
+  spr "" x:100 y:300
+    vel x:5 y:0
+    col "#FF4444"
+    w 50
+    h 50
+  end
+  
+  btn "Sair" x:700 y:550 w:80 h:30
+  end
+end
+
+# Camada Runtime (BRXR)
+loop while win.open
+  upd
+  drw
+  wait 16
+end
