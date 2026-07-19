@@ -1,0 +1,29 @@
+run "hello"
+
+# Declaração de variáveis com tipos da SPEC
+var nome:txt = "Dragon"
+var versao:num = 1.0
+
+out "BRX Linguagem de Programação"
+out "Autor: " + nome
+out "Versao: " + str(versao)
+
+var x:num = 10
+var y:num = 20
+var soma = x + y
+
+if soma > 15
+    out "A soma " + str(soma) + " e maior que 15"
+else
+    out "A soma e pequena"
+end
+
+out "Contagem regressiva:"
+loop i:1 to 3
+    out i
+end
+
+out "Loop simples:"
+loop 2
+    out "Repetindo..."
+end
