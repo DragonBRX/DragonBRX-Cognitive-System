@@ -83,6 +83,7 @@ class Goal:
     avoid: List[str] = field(default_factory=list)
     status: str = "active"
     progress: float = 0.0
+    evidence: List[str] = field(default_factory=list)
     created_at: float = field(default_factory=_now)
 
 
@@ -138,12 +139,14 @@ class CognitiveFabric:
         memory_limit: int = 2048,
         activation_decay: float = 0.82,
         link_learning_rate: float = 0.12,
+        association_spread: float = 0.18,
     ) -> None:
         if memory_limit < 16:
             raise ValueError("memory_limit deve ser >= 16")
         self.memory_limit = int(memory_limit)
         self.activation_decay = _clamp(activation_decay)
         self.link_learning_rate = _clamp(link_learning_rate)
+        self.association_spread = _clamp(association_spread)
         self.concepts: Dict[str, Concept] = {}
         self.goals: Dict[str, Goal] = {}
         self.agents: Dict[str, SubAgent] = {}
@@ -227,8 +230,10 @@ class CognitiveFabric:
         for goal in self.goals.values():
             if goal.status != "active":
                 continue
-            coverage = len(seen.intersection(goal.desired)) / len(goal.desired)
-            goal.progress = max(goal.progress, coverage)
+            accumulated = set(goal.evidence)
+            accumulated.update(seen.intersection(goal.desired))
+            goal.evidence = sorted(accumulated)
+            goal.progress = len(accumulated) / len(goal.desired)
             if goal.progress >= 1.0 and not seen.intersection(goal.avoid):
                 goal.status = "completed"
 
@@ -258,7 +263,7 @@ class CognitiveFabric:
         """Escolhe uma ação por objetivos, contexto, custo, risco e experiência."""
         with self._lock:
             self.cycle_count += 1
-            self._decay()
+            self._decay_and_spread()
             if not candidates:
                 return Decision(self.cycle_count, None, 0.0, ["sem ações candidatas"])
 
@@ -391,6 +396,7 @@ class CognitiveFabric:
         success: float,
         *,
         evidence: Optional[Mapping[str, Any]] = None,
+        agent_id: Optional[str] = None,
     ) -> Experience:
         """Reforça ou enfraquece conceitos usando o resultado real da ação."""
         outcome = _clamp(success)
@@ -414,11 +420,99 @@ class CognitiveFabric:
                 else:
                     concept.failures += 1
                 concept.confidence = concept.quality()
+            if agent_id and agent_id in self.agents:
+                agent = self.agents[agent_id]
+                agent.reliability = _clamp(0.8 * agent.reliability + 0.2 * outcome)
+                agent.load = _clamp(agent.load - 0.1)
         return event
 
-    def _decay(self) -> None:
+    def _decay_and_spread(self) -> None:
+        """Decai a atenção atual e propaga parte dela pelas relações aprendidas."""
+        incoming: Dict[str, float] = {}
         for concept in self.concepts.values():
             concept.activation *= self.activation_decay
+            total_link = sum(concept.links.values())
+            if concept.activation <= 0.0 or total_link <= 0.0:
+                continue
+            budget = concept.activation * self.association_spread
+            for target, weight in concept.links.items():
+                if target in self.concepts:
+                    incoming[target] = incoming.get(target, 0.0) + budget * weight / total_link
+        for name, boost in incoming.items():
+            self.concepts[name].activation = _clamp(
+                self.concepts[name].activation + boost
+            )
+
+    def recall(self, query: Any, limit: int = 5) -> List[Dict[str, Any]]:
+        """Recupera experiências por conceitos, atenção, saliência e recência."""
+        wanted = set(_tokens(query))
+        if limit < 1:
+            return []
+        now = _now()
+        ranked: List[tuple[float, Experience]] = []
+        with self._lock:
+            for event in self.experiences:
+                concepts = set(event.concepts)
+                overlap = len(wanted.intersection(concepts)) / max(1, len(wanted))
+                attention = sum(
+                    self.concepts[name].activation
+                    for name in concepts
+                    if name in self.concepts
+                ) / max(1, len(concepts))
+                age_hours = max(0.0, now - event.timestamp) / 3600.0
+                recency = 1.0 / (1.0 + age_hours)
+                score = (
+                    0.55 * overlap
+                    + 0.20 * attention
+                    + 0.15 * event.salience
+                    + 0.10 * recency
+                )
+                if overlap > 0.0 or not wanted:
+                    ranked.append((score, event))
+        ranked.sort(key=lambda item: (item[0], item[1].timestamp), reverse=True)
+        return [
+            {"score": round(score, 6), "experience": asdict(event)}
+            for score, event in ranked[:limit]
+        ]
+
+    def introspect(self, limit: int = 8) -> Dict[str, Any]:
+        """Produz um relatório interno estruturado, sem geração por modelo."""
+        with self._lock:
+            active = sorted(
+                self.concepts.values(),
+                key=lambda item: item.activation,
+                reverse=True,
+            )[:limit]
+            associations: List[Dict[str, Any]] = []
+            for concept in active:
+                if not concept.links:
+                    continue
+                target, strength = max(
+                    concept.links.items(), key=lambda item: item[1]
+                )
+                associations.append(
+                    {
+                        "from": concept.name,
+                        "to": target,
+                        "strength": round(strength, 4),
+                    }
+                )
+            unresolved = [
+                {
+                    "goal_id": goal.goal_id,
+                    "description": goal.description,
+                    "progress": round(goal.progress, 4),
+                    "missing": sorted(set(goal.desired).difference(goal.evidence)),
+                }
+                for goal in self.goals.values()
+                if goal.status == "active"
+            ]
+            return {
+                "cycle": self.cycle_count,
+                "focus": [item.name for item in active],
+                "strongest_associations": associations,
+                "unresolved_goals": unresolved,
+            }
 
     @staticmethod
     def _checksum(envelope: Mapping[str, Any]) -> str:
@@ -458,6 +552,7 @@ class CognitiveFabric:
                     "memory_limit": self.memory_limit,
                     "activation_decay": self.activation_decay,
                     "link_learning_rate": self.link_learning_rate,
+                    "association_spread": self.association_spread,
                 },
                 "cycle_count": self.cycle_count,
                 "concepts": {name: asdict(item) for name, item in self.concepts.items()},
