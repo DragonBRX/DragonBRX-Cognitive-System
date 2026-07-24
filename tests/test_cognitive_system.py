@@ -1,3 +1,5 @@
+import io
+import json
 import sys
 from pathlib import Path
 import tempfile
@@ -7,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from cognitive_fabric import Action, CognitiveFabric, self_test
-from distributed_runtime import envelope, sign, text_statistics, verify
+from distributed_runtime import AgentRegistry, envelope, sign, text_statistics, verify
 
 
 class CognitiveFabricTests(unittest.TestCase):
@@ -27,6 +29,28 @@ class CognitiveFabricTests(unittest.TestCase):
         self.assertIn("padrão", restored.concepts)
         self.assertEqual(len(restored.goals), 1)
         self.assertEqual(len(restored.experiences), 1)
+
+
+    def test_goal_accumulates_evidence_across_events(self):
+        core = CognitiveFabric()
+        goal = core.add_goal("combinar sinais", desired=["alpha", "beta"])
+        core.perceive("sinal", {"valor": "alpha"})
+        self.assertEqual(goal.status, "active")
+        core.perceive("sinal", {"valor": "beta"})
+        self.assertEqual(goal.status, "completed")
+        self.assertEqual(goal.progress, 1.0)
+
+    def test_recall_and_introspection(self):
+        core = CognitiveFabric()
+        core.add_goal("entender energia", desired=["energia", "estável"])
+        core.perceive("sensor", {"energia": "baixa"}, salience=0.9)
+        core.perceive("sensor", {"energia": "estável"}, salience=0.8)
+        recalled = core.recall({"energia": "baixa"}, limit=1)
+        self.assertEqual(len(recalled), 1)
+        self.assertIn("energia", recalled[0]["experience"]["concepts"])
+        report = core.introspect()
+        self.assertIn("focus", report)
+        self.assertIn("strongest_associations", report)
 
     def test_goal_guides_action(self):
         core = CognitiveFabric()
@@ -55,6 +79,31 @@ class CognitiveFabricTests(unittest.TestCase):
 
 
 class DistributedProtocolTests(unittest.TestCase):
+
+    def test_agent_result_closes_learning_cycle(self):
+        core = CognitiveFabric()
+        registry = AgentRegistry(core)
+        registry.server_secret = b"x" * 32
+        stream = io.BytesIO()
+        registry.attach("phone-01", stream, ["system_info"], "termux")
+        before = core.agents["phone-01"].reliability
+        action = Action(
+            "hardware-check",
+            "verificar hardware",
+            "system_info",
+            expected=["hardware", "disponível"],
+        )
+        message_id = registry.dispatch(action)
+        wire = json.loads(stream.getvalue().decode("utf-8").strip())
+        self.assertEqual(wire["message_id"], message_id)
+        closed = registry.complete(
+            "phone-01",
+            {"reply_to": message_id, "ok": True, "output": {"cpu_count": 8}},
+        )
+        self.assertTrue(closed)
+        self.assertGreater(core.agents["phone-01"].reliability, before)
+        self.assertTrue(any(event.kind == "outcome" for event in core.experiences))
+
     def test_signed_message(self):
         secret = b"x" * 32
         message = envelope("heartbeat", "phone-test", {"load": 0.1})
