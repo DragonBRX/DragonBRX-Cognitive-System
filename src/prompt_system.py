@@ -9,6 +9,8 @@ de aceitação. O resultado é estrutura de trabalho, não texto gerado.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import json
+from pathlib import Path
 import re
 import time
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
@@ -411,6 +413,35 @@ class PromptSystem:
             "progress": sum(task.status == "completed" for task in plan.tasks)
             / len(plan.tasks),
         }
+
+    def snapshot(self) -> Dict[str, Any]:
+        return {
+            "format": "dragonbrx-prompt-plans",
+            "version": 1,
+            "plans": {plan_id: asdict(plan) for plan_id, plan in self.plans.items()},
+        }
+
+    def save(self, path: str | Path) -> None:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(target.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(self.snapshot(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary.replace(target)
+
+    @classmethod
+    def load(cls, path: str | Path) -> "PromptSystem":
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        if data.get("format") != "dragonbrx-prompt-plans":
+            raise ValueError("arquivo de planos incompatível")
+        system = cls()
+        for plan_id, value in data.get("plans", {}).items():
+            tasks = [ProjectTask(**task) for task in value.pop("tasks", [])]
+            plan = ProjectPlan(tasks=tasks, **value)
+            system.plans[plan_id] = plan
+        return system
 
     def _identify(self, request: str) -> tuple[ProjectRecipe, float]:
         tokens = _words(request)
