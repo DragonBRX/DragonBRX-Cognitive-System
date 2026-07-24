@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 from uuid import uuid4
 
 from cognitive_fabric import Action, CognitiveFabric
+from prompt_system import PromptSystem
 
 
 PROTOCOL = "dragonbrx-node"
@@ -98,6 +99,7 @@ class AgentRegistry:
         self.core = core
         self.connections: Dict[str, Any] = {}
         self.inflight: Dict[str, Action] = {}
+        self.prompt_system: Optional[PromptSystem] = None
         self._lock = threading.RLock()
 
     def attach(
@@ -160,6 +162,16 @@ class AgentRegistry:
             evidence=dict(body),
             agent_id=agent_id,
         )
+        if self.prompt_system:
+            for plan_id, plan in self.prompt_system.plans.items():
+                if any(task.task_id == action.action_id for task in plan.tasks):
+                    self.prompt_system.complete_task(
+                        plan_id,
+                        action.action_id,
+                        body,
+                        success=bool(body.get("ok") is True),
+                    )
+                    break
         return True
 
 
@@ -172,11 +184,14 @@ class CognitiveTCPServer(socketserver.ThreadingTCPServer):
         address: tuple[str, int],
         core: CognitiveFabric,
         secret: bytes,
+        prompt_system: Optional[PromptSystem] = None,
     ) -> None:
         self.core = core
         self.secret = secret
+        self.prompt_system = prompt_system or PromptSystem()
         self.registry = AgentRegistry(core)
         self.registry.server_secret = secret
+        self.registry.prompt_system = self.prompt_system
         super().__init__(address, CognitiveRequestHandler)
 
 
@@ -377,6 +392,58 @@ def _central_command(
                 indent=2,
             )
         )
+    elif kind == "prompt":
+        plan = server.prompt_system.create_plan(str(command["request"]))
+        server.prompt_system.activate(core, plan)
+        print(
+            json.dumps(
+                server.prompt_system.status(plan.plan_id),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    elif kind == "plan":
+        print(
+            json.dumps(
+                server.prompt_system.status(str(command["plan_id"])),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    elif kind == "plan_dispatch":
+        plan_id = str(command["plan_id"])
+        assigned = []
+        waiting = []
+        for action in server.prompt_system.actions_for_ready_tasks(plan_id):
+            try:
+                message_id = server.registry.dispatch(action)
+                server.prompt_system.start_task(plan_id, action.action_id)
+                assigned.append(
+                    {"task_id": action.action_id, "message_id": message_id}
+                )
+            except RuntimeError as exc:
+                waiting.append(
+                    {
+                        "task_id": action.action_id,
+                        "capability": action.capability,
+                        "reason": str(exc),
+                    }
+                )
+        print(
+            json.dumps(
+                {"plan_id": plan_id, "assigned": assigned, "waiting": waiting},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    elif kind == "plan_complete":
+        task = server.prompt_system.complete_task(
+            str(command["plan_id"]),
+            str(command["task_id"]),
+            dict(command.get("result") or {}),
+            success=bool(command.get("success", True)),
+        )
+        print(json.dumps(asdict(task), ensure_ascii=False, indent=2))
     elif kind == "goal":
         goal = core.add_goal(
             str(command["description"]),
@@ -413,15 +480,25 @@ def _central_command(
         return False
     else:
         raise ValueError(
-            "tipo deve ser status, introspect, recall, goal, perceive, task, save ou exit"
+            "tipo deve ser status, introspect, recall, prompt, plan, "
+            "plan_dispatch, plan_complete, goal, perceive, task, save ou exit"
         )
     return True
 
 
 def run_central(args: argparse.Namespace) -> None:
     state_path = Path(args.state_file)
+    plans_path = Path(str(state_path) + ".plans.json")
     core = CognitiveFabric.load(state_path) if state_path.exists() else CognitiveFabric()
-    server = CognitiveTCPServer((args.host, args.port), core, read_secret(args.secret_file))
+    prompt_system = (
+        PromptSystem.load(plans_path) if plans_path.exists() else PromptSystem()
+    )
+    server = CognitiveTCPServer(
+        (args.host, args.port),
+        core,
+        read_secret(args.secret_file),
+        prompt_system,
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"DragonBRX central ouvindo em {args.host}:{args.port}")
@@ -442,6 +519,7 @@ def run_central(args: argparse.Namespace) -> None:
         server.shutdown()
         server.server_close()
         core.save(args.state_file)
+        server.prompt_system.save(plans_path)
 
 
 def run_agent(args: argparse.Namespace) -> None:
