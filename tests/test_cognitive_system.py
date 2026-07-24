@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from cognitive_fabric import Action, CognitiveFabric, self_test
 from distributed_runtime import AgentRegistry, envelope, sign, text_statistics, verify
+from prompt_system import PromptSystem
 
 
 class CognitiveFabricTests(unittest.TestCase):
@@ -78,7 +79,81 @@ class CognitiveFabricTests(unittest.TestCase):
         self.assertEqual(core.choose([unsafe, safe]).action.action_id, "safe")
 
 
+class PromptSystemTests(unittest.TestCase):
+    def test_game_prompt_discovers_complete_domains(self):
+        system = PromptSystem()
+        plan = system.create_plan(
+            "Cria um jogo 3D de aventura offline para Android"
+        )
+        self.assertEqual(plan.project_type, "game")
+        self.assertIn("3d", plan.constraints["dimension"])
+        self.assertIn("android", plan.constraints["platforms"])
+        capabilities = {task.capability for task in plan.tasks}
+        self.assertTrue(
+            {
+                "game_mechanics",
+                "game_physics",
+                "game_art",
+                "game_audio",
+                "game_ui",
+                "game_testing",
+                "game_optimization",
+                "game_release",
+            }.issubset(capabilities)
+        )
+        ready = system.ready_tasks(plan.plan_id)
+        self.assertEqual([task.key for task in ready], ["vision"])
+
+    def test_dependencies_unlock_progressively(self):
+        system = PromptSystem()
+        plan = system.create_plan("criar um jogo de plataforma")
+        vision = plan.task_map()["vision"]
+        system.complete_task(plan.plan_id, vision.task_id, {"scope": "small"})
+        ready_keys = {task.key for task in system.ready_tasks(plan.plan_id)}
+        self.assertTrue({"mechanics", "architecture", "art", "audio"}.issubset(ready_keys))
+        self.assertNotIn("integration", ready_keys)
+
+    def test_plan_persistence(self):
+        system = PromptSystem()
+        plan = system.create_plan("criar um jogo puzzle 2D")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "plans.json"
+            system.save(path)
+            restored = PromptSystem.load(path)
+        self.assertEqual(
+            restored.plans[plan.plan_id].project_type,
+            "game",
+        )
+        self.assertEqual(len(restored.plans[plan.plan_id].tasks), len(plan.tasks))
+
+
 class DistributedProtocolTests(unittest.TestCase):
+
+    def test_prompt_task_result_advances_plan(self):
+        core = CognitiveFabric()
+        prompt_system = PromptSystem()
+        plan = prompt_system.create_plan("criar um jogo 2D")
+        vision = plan.task_map()["vision"]
+        prompt_system.complete_task(plan.plan_id, vision.task_id)
+        mechanics = plan.task_map()["mechanics"]
+
+        registry = AgentRegistry(core)
+        registry.server_secret = b"x" * 32
+        registry.prompt_system = prompt_system
+        stream = io.BytesIO()
+        registry.attach("phone-design", stream, ["game_mechanics"], "termux")
+        action = next(
+            action
+            for action in prompt_system.actions_for_ready_tasks(plan.plan_id)
+            if action.action_id == mechanics.task_id
+        )
+        message_id = registry.dispatch(action)
+        prompt_system.start_task(plan.plan_id, mechanics.task_id)
+        registry.complete(
+            "phone-design",
+            {"reply_to": message_id, "ok": True, "output": {"loop": "jump"}},
+        )
+        self.assertEqual(mechanics.status, "completed")
 
     def test_agent_result_closes_learning_cycle(self):
         core = CognitiveFabric()
