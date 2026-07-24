@@ -37,11 +37,13 @@ Os componentes antigos ligados a `llmProcessor`, `cognitiveProcessor`, Ollama, p
 1. Uma percepção entra como evento JSON.
 2. O núcleo extrai conceitos e atualiza ativações.
 3. Conceitos observados juntos fortalecem suas relações.
-4. Objetivos ativos atribuem valor às ações candidatas.
-5. Custo, risco, contexto, novidade e conflitos alteram a pontuação.
-6. A melhor ação pode ser executada localmente ou enviada a um agente compatível.
-7. O resultado real reforça sucessos ou registra falhas.
-8. O estado pode ser salvo e retomado sem reconstruir a identidade do zero.
+4. A atenção se espalha de forma limitada pelas relações aprendidas.
+5. Objetivos acumulam evidências ao longo de experiências diferentes.
+6. Custo, risco, contexto, novidade e conflitos alteram a pontuação das ações.
+7. A melhor ação pode ser executada localmente ou enviada a um agente compatível.
+8. O resultado real fecha a tarefa, atualiza a memória e ajusta a confiabilidade do agente.
+9. Memórias podem ser recuperadas por contexto e recência.
+10. O estado pode ser salvo e retomado sem reconstruir a identidade do zero.
 
 ## Testar o núcleo
 
@@ -79,6 +81,8 @@ O console central aceita comandos JSON. Exemplos:
 
 ```json
 {"type":"status"}
+{"type":"introspect"}
+{"type":"recall","query":{"energia":"baixa"},"limit":5}
 {"type":"goal","description":"mapear recursos dos agentes","desired":["hardware","disponível"],"priority":0.9}
 {"type":"perceive","kind":"ordem","payload":{"ação":"inventariar celulares"},"salience":0.8}
 {"type":"task","name":"ler hardware do celular","capability":"system_info","inputs":{},"expected":["hardware","disponível"],"cost":0.1,"risk":0.0}
