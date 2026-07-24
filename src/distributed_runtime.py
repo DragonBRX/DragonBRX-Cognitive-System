@@ -294,11 +294,34 @@ class TermuxAgent:
                     accepted = receive_message(stream, self.secret)
                     if accepted.get("type") != "accepted":
                         raise RuntimeError("registro recusado")
-                    for message in self._messages(stream):
-                        self._handle(stream, message)
+                    heartbeat_stop = threading.Event()
+                    heartbeat = threading.Thread(
+                        target=self._heartbeat_loop,
+                        args=(stream, heartbeat_stop),
+                        daemon=True,
+                    )
+                    heartbeat.start()
+                    try:
+                        for message in self._messages(stream):
+                            self._handle(stream, message)
+                    finally:
+                        heartbeat_stop.set()
+                        heartbeat.join(timeout=1.0)
             except (OSError, EOFError, RuntimeError, ValueError) as exc:
                 print(f"[agent] conexão indisponível: {exc}; nova tentativa em {reconnect_delay}s")
                 time.sleep(reconnect_delay)
+
+    def _heartbeat_loop(
+        self,
+        stream: Any,
+        stop: threading.Event,
+        interval: float = 30.0,
+    ) -> None:
+        while not stop.wait(interval):
+            try:
+                self._send(stream, "heartbeat", {"load": 0.0})
+            except (OSError, ValueError):
+                return
 
     def _messages(self, stream: Any):
         while True:
