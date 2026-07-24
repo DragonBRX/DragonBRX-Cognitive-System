@@ -2,6 +2,8 @@ import io
 import json
 import sys
 from pathlib import Path
+import threading
+import time
 import tempfile
 import unittest
 
@@ -9,7 +11,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from cognitive_fabric import Action, CognitiveFabric, self_test
-from distributed_runtime import AgentRegistry, envelope, sign, text_statistics, verify
+from distributed_runtime import (
+    AgentRegistry,
+    TermuxAgent,
+    envelope,
+    sign,
+    text_statistics,
+    verify,
+)
 from prompt_system import PromptSystem
 
 
@@ -178,6 +187,27 @@ class DistributedProtocolTests(unittest.TestCase):
         self.assertTrue(closed)
         self.assertGreater(core.agents["phone-01"].reliability, before)
         self.assertTrue(any(event.kind == "outcome" for event in core.experiences))
+
+    def test_termux_heartbeat_keeps_channel_alive(self):
+        secret = b"x" * 32
+        agent = TermuxAgent("phone-heartbeat", secret, {"system_info": lambda _: {}})
+        stream = io.BytesIO()
+        stop = threading.Event()
+        thread = threading.Thread(
+            target=agent._heartbeat_loop,
+            args=(stream, stop, 0.01),
+        )
+        thread.start()
+        time.sleep(0.035)
+        stop.set()
+        thread.join(timeout=1)
+        messages = [
+            json.loads(line)
+            for line in stream.getvalue().decode("utf-8").splitlines()
+        ]
+        self.assertGreaterEqual(len(messages), 2)
+        self.assertTrue(all(message["type"] == "heartbeat" for message in messages))
+        self.assertTrue(all(verify(message, secret) for message in messages))
 
     def test_signed_message(self):
         secret = b"x" * 32
