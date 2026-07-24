@@ -336,17 +336,79 @@ BUILTIN_HANDLERS: Dict[str, Handler] = {
 }
 
 
+def _central_command(
+    server: CognitiveTCPServer,
+    core: CognitiveFabric,
+    raw: str,
+    state_file: str,
+) -> bool:
+    """Executa um comando JSON local; retorna False quando deve encerrar."""
+    command = json.loads(raw)
+    kind = command.get("type")
+    if kind == "status":
+        print(json.dumps(core.status(), ensure_ascii=False, indent=2))
+    elif kind == "goal":
+        goal = core.add_goal(
+            str(command["description"]),
+            desired=command["desired"],
+            avoid=command.get("avoid", []),
+            priority=float(command.get("priority", 0.5)),
+        )
+        print(json.dumps(asdict(goal), ensure_ascii=False, indent=2))
+    elif kind == "perceive":
+        event = core.perceive(
+            str(command.get("kind", "observation")),
+            dict(command.get("payload") or {}),
+            source=str(command.get("source", "operator")),
+            salience=float(command.get("salience", 0.5)),
+            confidence=float(command.get("confidence", 0.8)),
+        )
+        print(json.dumps(asdict(event), ensure_ascii=False, indent=2))
+    elif kind == "task":
+        action = Action(
+            action_id=str(command.get("action_id") or uuid4().hex),
+            name=str(command["name"]),
+            capability=str(command["capability"]),
+            inputs=dict(command.get("inputs") or {}),
+            expected=list(command.get("expected") or []),
+            cost=float(command.get("cost", 0.0)),
+            risk=float(command.get("risk", 0.0)),
+        )
+        message_id = server.registry.dispatch(action)
+        print(json.dumps({"dispatched": message_id}, indent=2))
+    elif kind == "save":
+        core.save(state_file)
+        print(json.dumps({"saved": state_file}))
+    elif kind in {"exit", "quit"}:
+        return False
+    else:
+        raise ValueError("tipo deve ser status, goal, perceive, task, save ou exit")
+    return True
+
+
 def run_central(args: argparse.Namespace) -> None:
-    core = CognitiveFabric()
+    state_path = Path(args.state_file)
+    core = CognitiveFabric.load(state_path) if state_path.exists() else CognitiveFabric()
     server = CognitiveTCPServer((args.host, args.port), core, read_secret(args.secret_file))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
     print(f"DragonBRX central ouvindo em {args.host}:{args.port}")
-    print("Sem modelo e sem API externa. Ctrl+C encerra.")
+    print("Sem modelo e sem API externa. Digite comandos JSON; {\"type\":\"status\"}.")
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
+        running = True
+        while running:
+            raw = input("dragonbrx> ").strip()
+            if not raw:
+                continue
+            try:
+                running = _central_command(server, core, raw, args.state_file)
+            except (KeyError, TypeError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+                print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+    except (KeyboardInterrupt, EOFError):
         pass
     finally:
         server.shutdown()
+        server.server_close()
         core.save(args.state_file)
 
 
