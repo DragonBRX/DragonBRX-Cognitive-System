@@ -54,29 +54,6 @@ python3 -m unittest tests/test_cognitive_system.py -v
 python3 src/cognitive_fabric.py
 ```
 
-## Preparar a chave da rede
-
-Crie o mesmo arquivo secreto no notebook central e em cada celular por um canal seguro:
-
-```bash
-mkdir -p ~/.dragonbrx
-python3 -c "import secrets,pathlib; pathlib.Path.home().joinpath('.dragonbrx/network.key').write_text(secrets.token_hex(32))"
-chmod 600 ~/.dragonbrx/network.key
-```
-
-Não publique esse arquivo no GitHub.
-
-## Executar o núcleo no notebook
-
-Para aceitar agentes na rede local:
-
-```bash
-python3 src/distributed_runtime.py central \
-  --host 0.0.0.0 \
-  --port 9999 \
-  --secret-file ~/.dragonbrx/network.key
-```
-
 ## Como notebook e Termux se conectam
 
 CMD, PowerShell, Bash e o terminal do Termux apenas iniciam o programa. Depois
@@ -163,26 +140,6 @@ O console central aceita comandos JSON. Exemplos:
 {"type":"save"}
 {"type":"exit"}
 ```
-
-## Instalar um agente no Termux
-
-No celular:
-
-```bash
-pkg update
-pkg install python git
-git clone https://github.com/DragonBRX/DragonBRX-Cognitive-System.git
-cd DragonBRX-Cognitive-System
-python3 src/distributed_runtime.py agent \
-  --host IP_DO_NOTEBOOK \
-  --port 9999 \
-  --agent-id celular-01 \
-  --secret-file ~/.dragonbrx/network.key \
-  --capability system_info \
-  --capability text_statistics
-```
-
-O firewall do notebook deve permitir a porta escolhida somente na rede confiável. Não exponha o serviço diretamente à internet.
 
 ## Capacidades dos agentes
 
