@@ -97,6 +97,7 @@ class AgentRegistry:
     def __init__(self, core: CognitiveFabric) -> None:
         self.core = core
         self.connections: Dict[str, Any] = {}
+        self.inflight: Dict[str, Action] = {}
         self._lock = threading.RLock()
 
     def attach(
@@ -142,7 +143,24 @@ class AgentRegistry:
                 },
             )
             send_message(stream, message, self.server_secret)
+            self.inflight[message["message_id"]] = action
             return message["message_id"]
+
+    def complete(self, agent_id: str, body: Mapping[str, Any]) -> bool:
+        """Fecha uma tarefa e transforma o resultado em aprendizagem."""
+        reply_to = str(body.get("reply_to", ""))
+        with self._lock:
+            action = self.inflight.pop(reply_to, None)
+        if action is None:
+            return False
+        success = 1.0 if body.get("ok") is True else 0.0
+        self.core.learn_outcome(
+            action,
+            success,
+            evidence=dict(body),
+            agent_id=agent_id,
+        )
+        return True
 
 
 class CognitiveTCPServer(socketserver.ThreadingTCPServer):
@@ -218,6 +236,8 @@ class CognitiveRequestHandler(socketserver.StreamRequestHandler):
             return
         if kind not in {"result", "observation"}:
             raise ValueError(f"mensagem {kind!r} não aceita")
+        if kind == "result" and self.server.registry.complete(agent_id, body):
+            return
         self.server.core.perceive(
             kind,
             body,
@@ -347,6 +367,16 @@ def _central_command(
     kind = command.get("type")
     if kind == "status":
         print(json.dumps(core.status(), ensure_ascii=False, indent=2))
+    elif kind == "introspect":
+        print(json.dumps(core.introspect(), ensure_ascii=False, indent=2))
+    elif kind == "recall":
+        print(
+            json.dumps(
+                core.recall(command.get("query", {}), int(command.get("limit", 5))),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     elif kind == "goal":
         goal = core.add_goal(
             str(command["description"]),
@@ -382,7 +412,9 @@ def _central_command(
     elif kind in {"exit", "quit"}:
         return False
     else:
-        raise ValueError("tipo deve ser status, goal, perceive, task, save ou exit")
+        raise ValueError(
+            "tipo deve ser status, introspect, recall, goal, perceive, task, save ou exit"
+        )
     return True
 
 
