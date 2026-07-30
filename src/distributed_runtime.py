@@ -19,17 +19,65 @@ import socket
 import socketserver
 import threading
 import time
+import math
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 from uuid import uuid4
 
 from cognitive_fabric import Action, CognitiveFabric
 from prompt_system import PromptSystem
+from pairing import load_pairing, public_pairing
 
 
 PROTOCOL = "dragonbrx-node"
 VERSION = 1
 MAX_MESSAGE_BYTES = 1_048_576
+DEFAULT_DISCOVERY_PORT = 9998
 Handler = Callable[[Mapping[str, Any]], Mapping[str, Any]]
+
+
+class ReplayGuard:
+    """Bounded nonce cache with a strict clock window."""
+
+    def __init__(
+        self,
+        *,
+        max_age_seconds: float = 120.0,
+        max_entries: int = 8_192,
+    ) -> None:
+        self.max_age_seconds = max(10.0, float(max_age_seconds))
+        self.max_entries = max(256, int(max_entries))
+        self._seen: Dict[tuple[str, str], float] = {}
+        self._lock = threading.Lock()
+
+    def accept(self, message: Mapping[str, Any]) -> bool:
+        try:
+            timestamp = float(message["timestamp"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        now = time.time()
+        if not math.isfinite(timestamp):
+            return False
+        if abs(now - timestamp) > self.max_age_seconds:
+            return False
+        sender = str(message.get("sender", "")).strip()
+        message_id = str(message.get("message_id", "")).strip()
+        if not sender or len(message_id) < 16:
+            return False
+        key = (sender, message_id)
+        with self._lock:
+            cutoff = now - self.max_age_seconds
+            self._seen = {
+                item: seen_at
+                for item, seen_at in self._seen.items()
+                if seen_at >= cutoff
+            }
+            if key in self._seen:
+                return False
+            if len(self._seen) >= self.max_entries:
+                oldest = min(self._seen, key=self._seen.get)
+                self._seen.pop(oldest, None)
+            self._seen[key] = now
+        return True
 
 
 def _canonical(message: Mapping[str, Any]) -> bytes:
@@ -80,7 +128,84 @@ def send_message(stream: Any, message: Mapping[str, Any], secret: bytes) -> None
     stream.flush()
 
 
-def receive_message(stream: Any, secret: bytes) -> Dict[str, Any]:
+class DiscoveryBroadcaster:
+    """Anuncia somente endereço e porta; autenticação continua obrigatória."""
+
+    def __init__(
+        self,
+        secret: bytes,
+        tcp_port: int,
+        *,
+        discovery_port: int = DEFAULT_DISCOVERY_PORT,
+        interval: float = 2.0,
+        pairing: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        self.secret = secret
+        self.tcp_port = int(tcp_port)
+        self.discovery_port = int(discovery_port)
+        self.interval = max(0.5, float(interval))
+        self.pairing = dict(pairing or {})
+        self.service_id = hashlib.sha256(secret).hexdigest()[:12]
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def packet(self) -> bytes:
+        message = sign(
+            envelope(
+                "discovery",
+                "core",
+                {
+                    "service": "DragonBRX",
+                    "service_id": self.service_id,
+                    "tcp_port": self.tcp_port,
+                    "local_only": True,
+                    "pairing": self.pairing,
+                },
+            ),
+            self.secret,
+        )
+        return json.dumps(
+            message,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="dragonbrx-lan-discovery",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+        self._thread = None
+
+    def _run(self) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as beacon:
+            beacon.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            while not self._stop.is_set():
+                try:
+                    beacon.sendto(
+                        self.packet(),
+                        ("255.255.255.255", self.discovery_port),
+                    )
+                except OSError:
+                    pass
+                self._stop.wait(self.interval)
+
+
+def receive_message(
+    stream: Any,
+    secret: bytes,
+    replay_guard: Optional[ReplayGuard] = None,
+) -> Dict[str, Any]:
     raw = stream.readline(MAX_MESSAGE_BYTES + 2)
     if not raw:
         raise EOFError("conexão encerrada")
@@ -91,15 +216,23 @@ def receive_message(stream: Any, secret: bytes) -> Dict[str, Any]:
         raise ValueError("protocolo incompatível")
     if not verify(data, secret):
         raise ValueError("assinatura inválida")
+    if replay_guard is not None and not replay_guard.accept(data):
+        raise ValueError("mensagem repetida, expirada ou sem nonce válido")
     return data
 
 
 class AgentRegistry:
-    def __init__(self, core: CognitiveFabric) -> None:
+    def __init__(
+        self,
+        core: CognitiveFabric,
+        *,
+        lease_seconds: float = 300.0,
+    ) -> None:
         self.core = core
         self.connections: Dict[str, Any] = {}
-        self.inflight: Dict[str, Action] = {}
+        self.inflight: Dict[str, tuple[Action, str, float]] = {}
         self.prompt_system: Optional[PromptSystem] = None
+        self.lease_seconds = max(10.0, float(lease_seconds))
         self._lock = threading.RLock()
 
     def attach(
@@ -145,14 +278,88 @@ class AgentRegistry:
                 },
             )
             send_message(stream, message, self.server_secret)
-            self.inflight[message["message_id"]] = action
+            self.inflight[message["message_id"]] = (
+                action,
+                decision.delegated_to,
+                time.time() + self.lease_seconds,
+            )
             return message["message_id"]
+
+    @staticmethod
+    def _redelivery_message(
+        message_id: str,
+        action: Action,
+    ) -> Dict[str, Any]:
+        message = envelope(
+            "task",
+            "core",
+            {
+                "action_id": action.action_id,
+                "name": action.name,
+                "capability": action.capability,
+                "inputs": action.inputs,
+                "expected": action.expected,
+                "redelivered": True,
+            },
+        )
+        message["message_id"] = message_id
+        return message
+
+    def redeliver(self, agent_id: str) -> int:
+        """Reenvia leases vivos após uma reconexão do mesmo agente."""
+        now = time.time()
+        with self._lock:
+            stream = self.connections.get(agent_id)
+            if stream is None:
+                return 0
+            expired = [
+                message_id
+                for message_id, (_, _, expires_at) in self.inflight.items()
+                if expires_at < now
+            ]
+            for message_id in expired:
+                self.inflight.pop(message_id, None)
+            pending = [
+                (message_id, action)
+                for message_id, (
+                    action,
+                    assigned_agent,
+                    expires_at,
+                ) in self.inflight.items()
+                if assigned_agent == agent_id and expires_at >= now
+            ]
+            for message_id, action in pending:
+                self.inflight[message_id] = (
+                    action,
+                    agent_id,
+                    now + self.lease_seconds,
+                )
+        for message_id, action in pending:
+            send_message(
+                stream,
+                self._redelivery_message(message_id, action),
+                self.server_secret,
+            )
+        return len(pending)
 
     def complete(self, agent_id: str, body: Mapping[str, Any]) -> bool:
         """Fecha uma tarefa e transforma o resultado em aprendizagem."""
         reply_to = str(body.get("reply_to", ""))
         with self._lock:
-            action = self.inflight.pop(reply_to, None)
+            assignment = self.inflight.get(reply_to)
+            if assignment is None:
+                return False
+            action, assigned_agent, expires_at = assignment
+            if (
+                assigned_agent != agent_id
+                or time.time() > expires_at
+                or str(body.get("action_id", "")) != action.action_id
+                or str(body.get("capability", "")) != action.capability
+            ):
+                if time.time() > expires_at:
+                    self.inflight.pop(reply_to, None)
+                return False
+            self.inflight.pop(reply_to, None)
         if action is None:
             return False
         success = 1.0 if body.get("ok") is True else 0.0
@@ -189,6 +396,7 @@ class CognitiveTCPServer(socketserver.ThreadingTCPServer):
         self.core = core
         self.secret = secret
         self.prompt_system = prompt_system or PromptSystem()
+        self.replay_guard = ReplayGuard()
         self.registry = AgentRegistry(core)
         self.registry.server_secret = secret
         self.registry.prompt_system = self.prompt_system
@@ -201,7 +409,11 @@ class CognitiveRequestHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         agent_id: Optional[str] = None
         try:
-            hello = receive_message(self.rfile, self.server.secret)
+            hello = receive_message(
+                self.rfile,
+                self.server.secret,
+                self.server.replay_guard,
+            )
             if hello.get("type") != "hello":
                 raise ValueError("a primeira mensagem precisa ser hello")
             body = dict(hello.get("body") or {})
@@ -209,6 +421,8 @@ class CognitiveRequestHandler(socketserver.StreamRequestHandler):
             capabilities = body.get("capabilities", [])
             if not agent_id or not isinstance(capabilities, list) or not capabilities:
                 raise ValueError("identidade ou capacidades inválidas")
+            if str(hello.get("sender", "")).strip() != agent_id:
+                raise ValueError("sender e agent_id não correspondem")
             self.server.registry.attach(
                 agent_id,
                 self.wfile,
@@ -220,9 +434,14 @@ class CognitiveRequestHandler(socketserver.StreamRequestHandler):
                 envelope("accepted", "core", {"agent_id": agent_id}),
                 self.server.secret,
             )
+            self.server.registry.redeliver(agent_id)
 
             while True:
-                message = receive_message(self.rfile, self.server.secret)
+                message = receive_message(
+                    self.rfile,
+                    self.server.secret,
+                    self.server.replay_guard,
+                )
                 self._integrate(agent_id, message)
         except EOFError:
             pass
@@ -240,6 +459,8 @@ class CognitiveRequestHandler(socketserver.StreamRequestHandler):
                 self.server.registry.detach(agent_id)
 
     def _integrate(self, agent_id: str, message: Mapping[str, Any]) -> None:
+        if str(message.get("sender", "")).strip() != agent_id:
+            raise ValueError("agente tentou usar a identidade de outro nó")
         kind = str(message.get("type"))
         body = dict(message.get("body") or {})
         agent = self.server.core.agents.get(agent_id)
@@ -251,7 +472,21 @@ class CognitiveRequestHandler(socketserver.StreamRequestHandler):
             return
         if kind not in {"result", "observation"}:
             raise ValueError(f"mensagem {kind!r} não aceita")
-        if kind == "result" and self.server.registry.complete(agent_id, body):
+        if kind == "result":
+            accepted = self.server.registry.complete(agent_id, body)
+            send_message(
+                self.wfile,
+                envelope(
+                    "result_ack",
+                    "core",
+                    {
+                        "reply_to": body.get("reply_to"),
+                        "action_id": body.get("action_id"),
+                        "accepted": accepted,
+                    },
+                ),
+                self.server.secret,
+            )
             return
         self.server.core.perceive(
             kind,
@@ -275,6 +510,7 @@ class TermuxAgent:
         self.secret = secret
         self.handlers = dict(handlers)
         self._write_lock = threading.Lock()
+        self._replay_guard = ReplayGuard()
 
     def run(self, host: str, port: int, reconnect_delay: float = 5.0) -> None:
         while True:
@@ -291,7 +527,11 @@ class TermuxAgent:
                             "platform": f"{platform.system()}-{platform.machine()}",
                         },
                     )
-                    accepted = receive_message(stream, self.secret)
+                    accepted = receive_message(
+                        stream,
+                        self.secret,
+                        self._replay_guard,
+                    )
                     if accepted.get("type") != "accepted":
                         raise RuntimeError("registro recusado")
                     heartbeat_stop = threading.Event()
@@ -317,15 +557,21 @@ class TermuxAgent:
         stop: threading.Event,
         interval: float = 30.0,
     ) -> None:
-        while not stop.wait(interval):
+        while not stop.is_set():
             try:
                 self._send(stream, "heartbeat", {"load": 0.0})
             except (OSError, ValueError):
                 return
+            if stop.wait(interval):
+                return
 
     def _messages(self, stream: Any):
         while True:
-            yield receive_message(stream, self.secret)
+            yield receive_message(
+                stream,
+                self.secret,
+                self._replay_guard,
+            )
 
     def _send(
         self,
@@ -516,15 +762,37 @@ def run_central(args: argparse.Namespace) -> None:
     prompt_system = (
         PromptSystem.load(plans_path) if plans_path.exists() else PromptSystem()
     )
+    secret = read_secret(args.secret_file)
     server = CognitiveTCPServer(
         (args.host, args.port),
         core,
-        read_secret(args.secret_file),
+        secret,
         prompt_system,
+    )
+    discovery = (
+        DiscoveryBroadcaster(
+            secret,
+            server.server_address[1],
+            discovery_port=args.discovery_port,
+            pairing=(
+                public_pairing(load_pairing(args.pairing_file))
+                if args.pairing_file
+                else None
+            ),
+        )
+        if args.discoverable
+        else None
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    if discovery is not None:
+        discovery.start()
     print(f"DragonBRX central ouvindo em {args.host}:{args.port}")
+    if discovery is not None:
+        print(
+            "Descoberta LAN ativa em UDP "
+            f"{args.discovery_port}; autenticação HMAC obrigatória."
+        )
     print("Sem modelo e sem API externa. Digite comandos JSON; {\"type\":\"status\"}.")
     try:
         running = True
@@ -539,6 +807,8 @@ def run_central(args: argparse.Namespace) -> None:
     except (KeyboardInterrupt, EOFError):
         pass
     finally:
+        if discovery is not None:
+            discovery.stop()
         server.shutdown()
         server.server_close()
         core.save(args.state_file)
@@ -567,6 +837,20 @@ def parser() -> argparse.ArgumentParser:
     central.add_argument("--port", type=int, default=9999)
     central.add_argument("--secret-file", required=True)
     central.add_argument("--state-file", default="state/cognitive-state.json")
+    central.add_argument(
+        "--pairing-file",
+        help="metadados públicos do KDF, mantidos fora do repositório",
+    )
+    central.add_argument(
+        "--discoverable",
+        action="store_true",
+        help="anunciar o coordenador somente por broadcast na LAN",
+    )
+    central.add_argument(
+        "--discovery-port",
+        type=int,
+        default=DEFAULT_DISCOVERY_PORT,
+    )
     central.set_defaults(func=run_central)
 
     agent = sub.add_parser("agent", help="executar agente em notebook ou Termux")
