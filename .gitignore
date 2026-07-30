@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.dragonbrx/
+state/
+*.key
+*.secret
+*.token
+ios-worker-state.json
+ios-worker-state.json.tmp
+pairing.json
+pairing.json.tmp
