@@ -2,6 +2,7 @@ import time
 import json
 from typing import Any, Dict, List, Optional
 from pathlib import Path
+from temporal_elasticity import TemporalElasticity
 
 class AutonomousFeedbackLoop:
     """
@@ -15,6 +16,7 @@ class AutonomousFeedbackLoop:
         self.synthesizer = synthesizer
         self.researcher = researcher
         self.lab = lab
+        self.elasticity = TemporalElasticity(base_delay=0.5)
         self.running = False
         self.cycle_count = 0
 
@@ -61,7 +63,8 @@ class AutonomousFeedbackLoop:
                 current_goal = concepts[0] # Evolui o objetivo para um sub-conceito aprendido
                 print(f"[5] Evolução: Próximo foco autônomo será '{current_goal}'")
             
-            time.sleep(1) # Simula o tempo de processamento cerebral
+            # Pausa elástica: ajusta o tempo de pensamento ao hardware disponível
+            self.elasticity.simulate_thought_pause()
 
         self.running = False
         print("\n[AUTONOMIA] Loop concluído. O cérebro evoluiu através de múltiplos ciclos.")

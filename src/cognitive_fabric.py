@@ -476,6 +476,19 @@ class CognitiveFabric:
             self.concepts[name].activation = _clamp(
                 self.concepts[name].activation + boost
             )
+        
+        # COGNITIVE PRUNING (O Gari Cognitivo)
+        # Se o cérebro estiver ficando pesado, remove conceitos com baixíssima ativação
+        if len(self.concepts) > self.memory_limit * 0.8:
+            threshold = 0.01
+            to_remove = [
+                name for name, c in self.concepts.items() 
+                if c.activation < threshold and c.encounters < 5
+            ]
+            for name in to_remove:
+                del self.concepts[name]
+            if to_remove:
+                print(f"[PRUNING] Otimização: {len(to_remove)} conceitos irrelevantes removidos.")
 
     def recall(self, query: Any, limit: int = 5) -> List[Dict[str, Any]]:
         """Recupera experiências por conceitos, atenção, saliência e recência."""
