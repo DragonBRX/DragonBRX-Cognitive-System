@@ -160,7 +160,13 @@ class DistributedProtocolTests(unittest.TestCase):
         prompt_system.start_task(plan.plan_id, mechanics.task_id)
         registry.complete(
             "phone-design",
-            {"reply_to": message_id, "ok": True, "output": {"loop": "jump"}},
+            {
+                "reply_to": message_id,
+                "ok": True,
+                "output": {"loop": "jump"},
+                "action_id": mechanics.task_id,
+                "capability": "game_mechanics",
+            },
         )
         self.assertEqual(mechanics.status, "completed")
 
@@ -182,7 +188,13 @@ class DistributedProtocolTests(unittest.TestCase):
         self.assertEqual(wire["message_id"], message_id)
         closed = registry.complete(
             "phone-01",
-            {"reply_to": message_id, "ok": True, "output": {"cpu_count": 8}},
+            {
+                "reply_to": message_id,
+                "ok": True,
+                "output": {"cpu_count": 8},
+                "action_id": "hardware-check",
+                "capability": "system_info",
+            },
         )
         self.assertTrue(closed)
         self.assertGreater(core.agents["phone-01"].reliability, before)

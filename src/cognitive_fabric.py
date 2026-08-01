@@ -24,6 +24,7 @@ from threading import RLock
 import time
 from typing import Any, Deque, Dict, Iterable, List, Mapping, Optional, Sequence
 from uuid import uuid4
+from lira_core import LiraState, CognitiveStep
 
 
 _TOKEN_RE = re.compile(r"[A-Za-zÀ-ÿ0-9_\-]{2,}")
@@ -140,6 +141,7 @@ class CognitiveFabric:
         activation_decay: float = 0.82,
         link_learning_rate: float = 0.12,
         association_spread: float = 0.18,
+        lira_path: str = "lira_state.json"
     ) -> None:
         if memory_limit < 16:
             raise ValueError("memory_limit deve ser >= 16")
@@ -154,6 +156,7 @@ class CognitiveFabric:
         self.pending: Dict[str, Dict[str, Any]] = {}
         self.cycle_count = 0
         self._lock = RLock()
+        self.lira = LiraState(lira_path)
 
     def add_goal(
         self,
@@ -259,30 +262,49 @@ class CognitiveFabric:
             self.agents[agent_id] = agent
         return agent
 
-    def choose(self, candidates: Sequence[Action]) -> Decision:
+    def choose(self, candidates: Sequence[Action], intent: str = "") -> Decision:
         """Escolhe uma ação por objetivos, contexto, custo, risco e experiência."""
         with self._lock:
             self.cycle_count += 1
             self._decay_and_spread()
+            
+            step = CognitiveStep(intent=intent)
+            step.domains_activated = sorted({task.capability for task in candidates}) if candidates else []
+            
             if not candidates:
-                return Decision(self.cycle_count, None, 0.0, ["sem ações candidatas"])
+                decision = Decision(self.cycle_count, None, 0.0, ["sem ações candidatas"])
+                step.method_result = "Nenhuma ação candidata disponível"
+                self.lira.add_step(step)
+                return decision
 
             ranked = [(self._score(action), action) for action in candidates]
             ranked.sort(key=lambda item: (item[0][0], item[1].action_id), reverse=True)
             (score, reasons), selected = ranked[0]
+            
+            step.interpretation = f"Priorizando {selected.name} entre {len(candidates)} opções"
+            step.hypotheses = [f"Ação {a.name} pode atingir {a.expected}" for a in candidates[:3]]
+            step.decision_reason = "; ".join(reasons)
+            
             agent = self._select_agent(selected.capability)
             delegated_to = agent.agent_id if agent else None
             if delegated_to:
                 reasons.append(f"delegável para {delegated_to}")
             else:
                 reasons.append("execução local ou agente ainda indisponível")
-            return Decision(
+            
+            decision = Decision(
                 cycle=self.cycle_count,
                 action=selected,
                 score=score,
                 reasons=reasons,
                 delegated_to=delegated_to,
             )
+            
+            step.actions_taken = [asdict(selected)]
+            step.method_result = f"Ação selecionada: {selected.name}"
+            self.lira.add_step(step)
+            
+            return decision
 
     def _score(self, action: Action) -> tuple[float, List[str]]:
         expected = set(_tokens(action.expected))

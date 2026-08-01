@@ -1,5 +1,9 @@
-import tkinter as tk
-from PIL import Image, ImageTk
+try:
+    import tkinter as tk
+    from PIL import Image, ImageTk
+    HAS_GUI = True
+except ImportError:
+    HAS_GUI = False
 import os
 
 class BRXVEngine:
@@ -9,8 +13,13 @@ class BRXVEngine:
         self.elements = []
         self.sprites = []
         self.is_open = False
+        if not HAS_GUI:
+            print("[VISUAL] Rodando em modo headless (sem GUI)")
 
     def init_window(self, width=800, height=600, title="BRX Window", bg="#1a1a2e"):
+        if not HAS_GUI:
+            self.is_open = True
+            return
         if self.root: return
         self.root = tk.Tk()
         self.root.title(title)

@@ -1,0 +1,33 @@
+graph TD
+    subgraph "Modelo Tradicional (Estático)"
+        A[Entrada do Usuário] --> B(Processamento Estatístico)
+        B --> C[Resposta Única]
+        C --> D{Fim}
+    end
+
+    subgraph "Sistemas Agênticos (Ex: Claude Loop)"
+        E[Objetivo] --> F(Planejamento)
+        F --> G(Ação no Mundo/Ferramenta)
+        G --> H(Observação do Resultado)
+        H --> I{Objetivo Concluído?}
+        I -- Não --> F
+        I -- Sim --> J[Entrega Final]
+    end
+
+    subgraph "DragonBRX (Cérebro Evolutivo)"
+        K[Intenção/Estímulo] --> L(Integração Sináptica)
+        L --> M(Deliberação e Escolha)
+        M --> N(Experimentação Autônoma)
+        N --> O(Auto-Validação e Recompensa)
+        O --> P(Aprimoramento do Cérebro)
+        P --> L
+        P -.-> Q[Criação de Novo Conhecimento]
+    end
+
+    style DragonBRX fill:#f96,stroke:#333,stroke-width:4px
+    style E fill:#bbf,stroke:#333
+    style F fill:#bbf,stroke:#333
+    style G fill:#bbf,stroke:#333
+    style H fill:#bbf,stroke:#333
+    style I fill:#bbf,stroke:#333
+    style J fill:#bbf,stroke:#333
