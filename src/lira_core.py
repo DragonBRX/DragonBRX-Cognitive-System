@@ -21,6 +21,13 @@ class CognitiveStep:
     decision_reason: str = ""
     method_result: str = ""
     candidate_learning: List[Dict[str, Any]] = field(default_factory=list)
+    # Metacognição (Blueprint Codex)
+    metacognition: Dict[str, Any] = field(default_factory=lambda: {
+        "confidence": 0.0,
+        "uncertainty_source": "",
+        "strategy_adopted": "immediate", # immediate, careful, deep, experimental
+        "self_correction_applied": False
+    })
 
 class LiraState:
     """

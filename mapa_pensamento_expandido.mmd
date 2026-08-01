@@ -1,0 +1,37 @@
+graph TD
+    subgraph C1 ["Camada 1: Percepção e Sentidos"]
+        A[Estímulo Externo/Web] --> B(Extração de Alegações)
+        B --> C{Filtro de Relevância}
+        C -- Irrelevante --> D[Descarte]
+        C -- Relevante --> E[Candidato em Quarentena]
+    end
+
+    subgraph C2 ["Camada 2: Introspecção e Deliberação"]
+        E --> F(Ativação de Domínios no Atlas)
+        F --> G(Recuperação de Memória .lira)
+        G --> H(Identificação de Lacunas)
+        H --> I[Geração de Hipóteses e Variantes]
+    end
+
+    subgraph C3 ["Camada 3: Experimentação e Falsificação"]
+        I --> J(Simulação em Sandbox)
+        J --> K{Validação/Falsificação}
+        K -- Falha --> L[Registro de Anti-Padrão]
+        L --> I
+        K -- Sucesso --> M[Consolidação Procedural]
+    end
+
+    subgraph C4 ["Camada 4: Auto-Evolução (Metacognição)"]
+        M --> N(Refino de Parâmetros/Weights)
+        N --> O(Promoção para Estado Stable)
+        O --> P(Atualização do Próprio Método)
+        P --> Q[Novo Estado Evolutivo do Cérebro]
+    end
+
+    Q -.-> A
+    
+    style C1 fill:#e1f5fe,stroke:#01579b
+    style C2 fill:#fff9c4,stroke:#fbc02d
+    style C3 fill:#f8bbd0,stroke:#c2185b
+    style C4 fill:#c8e6c9,stroke:#2e7d32
+    style Q fill:#f96,stroke:#333,stroke-width:4px

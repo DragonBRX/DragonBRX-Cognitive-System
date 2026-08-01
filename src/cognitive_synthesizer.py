@@ -14,12 +14,12 @@ class CognitiveSynthesizer:
         self.drafts_path = Path("internal_drafts")
         self.drafts_path.mkdir(parents=True, exist_ok=True)
 
-    def synthesize_new_knowledge(self, topic: str, learned_concepts: List[str]) -> str:
+    def synthesize_new_knowledge(self, topic: str, learned_concepts: List[str], strategy: str = "careful") -> str:
         """
-        Cria um rascunho original (draft) baseado nos conceitos absorvidos.
+        Cria um rascunho original (draft) baseado nos conceitos absorvidos, com suporte a hipóteses.
         Não é um texto pré-pronto, mas uma construção baseada nas relações sinápticas.
         """
-        print(f"[SYNTH] Iniciando síntese sobre: {topic}")
+        print(f"[SYNTH] Iniciando síntese ({strategy}) sobre: {topic}")
         
         # Integra os conceitos ao núcleo cognitivo
         for concept in learned_concepts:
@@ -32,7 +32,13 @@ class CognitiveSynthesizer:
         # Criação do rascunho (Draft)
         draft_content = f"--- RASCUNHO COGNITIVO: {topic.upper()} ---\n"
         draft_content += f"Data Estelar: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        draft_content += f"Estratégia Adotada: {strategy}\n"
         draft_content += f"Base de Atenção: {', '.join(focus[:5])}\n\n"
+        
+        draft_content += "HIPÓTESES E VARIANTES:\n"
+        if len(learned_concepts) >= 2:
+            draft_content += f"1. Hipótese de Convergência: {learned_concepts[0]} e {learned_concepts[1]} são interdependentes.\n"
+            draft_content += f"2. Variante Experimental: O efeito de {learned_concepts[0]} pode ser anulado por falta de contexto.\n\n"
         
         draft_content += "SÍNTESE AUTÔNOMA:\n"
         if len(learned_concepts) >= 3:

@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+import sys
+import os
+
+# Adiciona o diretório src/logic ao path para importar a implementação atual
+# Resolve o caminho real do script caso seja um link simbólico
+script_path = os.path.realpath(__file__)
+logic_path = os.path.abspath(os.path.join(os.path.dirname(script_path), '..', 'src', 'logic'))
+sys.path.append(logic_path)
+
+
+try:
+    from lira_binary import LiraBinary
+except ImportError:
+    print("Erro: Componentes do Lira-Logic não encontrados.")
+    sys.exit(1)
+
+try:
+    from lira_open_injection import OpenInjectionProtocol, write_schema
+except ImportError:
+    OpenInjectionProtocol = None
+
+try:
+    from lira_knowledge_compiler import KnowledgeCompiler
+except ImportError:
+    KnowledgeCompiler = None
+
+# Parâmetros padrão do compilador de conhecimento (os que já funcionam hoje).
+# Mantidos aqui centralizados para não precisar redigitar em cada chamada.
+DEFAULT_N_FEATURES = 256
+DEFAULT_RIDGE_LAMBDA = 1.0
+
+def main():
+    if len(sys.argv) < 2:
+        print("Lira Executor v2.0")
+        print("Uso: lira <comando> [argumentos]")
+        print("\nComandos disponíveis:")
+        print("  run <arquivo.lira>    Executa um agente Lira")
+        print("  info <arquivo.lira>   Exibe informações do estado do agente")
+        print("  verify <arquivo.lira> Verifica a integridade do agente")
+        print("\nProtocolo de Injeção Aberta (LKIF):")
+        print("  read-knowledge <arquivo.lira> [categoria]   Lista o conhecimento já armazenado")
+        print("  inject <arquivo.lira> <arquivo.lkif.jsonl>  Injeta conhecimento de outro modelo")
+        print("  export-knowledge <arquivo.lira> <saida.jsonl> [categoria]  Exporta para outro modelo ler")
+        print("  schema <saida.json>                          Grava o schema formal do LKIF")
+        print("\nCompilador de Conhecimento (palavras -> parâmetros reais):")
+        print("  compile-knowledge <arquivo.lira> <categoria> [n_features] [ridge_lambda]")
+        print("                                                Treina um adaptador (regressão de Ridge)")
+        print("                                                sobre o conhecimento em texto da categoria")
+        print("                                                e grava o resultado como parâmetro binário.")
+        print("                                                Padrões: n_features=256, ridge_lambda=1.0")
+        print("  compile-all-knowledge <arquivo.lira> [n_features] [ridge_lambda]")
+        print("                                                Compila todas as categorias de uma vez.")
+        print("  query-knowledge <arquivo.lira> <categoria> <pergunta> [top_k]")
+        print("                                                Consulta o PARÂMETRO treinado (não faz grep")
+        print("                                                em texto) e devolve a resposta mais próxima.")
+        sys.exit(0)
+
+    cmd = sys.argv[1]
+    
+    if cmd == "run":
+        if len(sys.argv) < 3:
+            print("Erro: Especifique um arquivo .lira para rodar.")
+            sys.exit(1)
+        path = sys.argv[2]
+        print(f"[*] Iniciando Executor Lira...")
+        print(f"[*] Carregando Lira-Core (Rust Simulation)...")
+        print(f"[*] Carregando Lira-Numerical (C++/CUDA Simulation)...")
+        print(f"[*] Executando estado: {path}")
+        
+        if not os.path.exists(path):
+            print(f"Erro: Arquivo {path} não encontrado.")
+            sys.exit(1)
+            
+        lira = LiraBinary(path)
+        print(f"[+] Agente carregado com sucesso!")
+        print(f"[+] Geração atual: {lira._metadata['history']['current']}")
+        print(f"[+] Conhecimento acumulado: {len(lira._metadata['modules'])} módulos ativos.")
+        print("\n[Lira] O agente está pronto e operando no ecossistema híbrido.")
+
+    elif cmd == "info":
+        path = sys.argv[2] if len(sys.argv) > 2 else None
+        if not path:
+            print("Erro: Especifique um arquivo .lira.")
+            sys.exit(1)
+        lira = LiraBinary(path)
+        print(f"--- Informações do Agente Lira ---")
+        print(f"Arquivo: {path}")
+        print(f"Arquitetura: {lira._sb['arch_code']}")
+        print(f"Quantização: {lira._sb['quantization']}")
+        print(f"Módulos: {list(lira._metadata['modules'].keys())}")
+        
+    elif cmd == "read-knowledge":
+        if OpenInjectionProtocol is None:
+            print("Erro: lira_open_injection não encontrado."); sys.exit(1)
+        if len(sys.argv) < 3:
+            print("Erro: Especifique um arquivo .lira."); sys.exit(1)
+        lb = LiraBinary(sys.argv[2])
+        oip = OpenInjectionProtocol(lb)
+        categoria = sys.argv[3] if len(sys.argv) > 3 else None
+        if categoria:
+            for e in oip.read_category(categoria):
+                print(f"[{e['id']}] ({e['source_model']}, conf={e['confidence']}) P: {e['question']}")
+        else:
+            for cat in oip.list_knowledge_categories():
+                print(f"- {cat}: {len(oip.read_category(cat))} entradas")
+
+    elif cmd == "inject":
+        if OpenInjectionProtocol is None:
+            print("Erro: lira_open_injection não encontrado."); sys.exit(1)
+        if len(sys.argv) < 4:
+            print("Erro: Uso: lira inject <arquivo.lira> <arquivo.lkif.jsonl>"); sys.exit(1)
+        lb = LiraBinary(sys.argv[2])
+        oip = OpenInjectionProtocol(lb)
+        ids = oip.import_jsonl(sys.argv[3])
+        print(f"[+] {len(ids)} entradas processadas (duplicatas foram automaticamente ignoradas).")
+
+    elif cmd == "export-knowledge":
+        if OpenInjectionProtocol is None:
+            print("Erro: lira_open_injection não encontrado."); sys.exit(1)
+        if len(sys.argv) < 4:
+            print("Erro: Uso: lira export-knowledge <arquivo.lira> <saida.jsonl> [categoria] [--include-private]"); sys.exit(1)
+        lb = LiraBinary(sys.argv[2])
+        oip = OpenInjectionProtocol(lb)
+        args_rest = sys.argv[4:]
+        include_private = "--include-private" in args_rest
+        categoria = next((a for a in args_rest if not a.startswith("--")), None)
+        out = oip.export_jsonl(sys.argv[3], category=categoria, include_private=include_private)
+        aviso = " (incluindo entradas 'private')" if include_private else " (entradas 'private' omitidas)"
+        print(f"[+] Exportado para {out}{aviso}")
+
+    elif cmd == "compile-knowledge":
+        if OpenInjectionProtocol is None or KnowledgeCompiler is None:
+            print("Erro: lira_open_injection ou lira_knowledge_compiler não encontrados."); sys.exit(1)
+        if len(sys.argv) < 4:
+            print("Erro: Uso: lira compile-knowledge <arquivo.lira> <categoria> [n_features] [ridge_lambda] [--force]")
+            sys.exit(1)
+        path, categoria = sys.argv[2], sys.argv[3]
+        rest = sys.argv[4:]
+        force = "--force" in rest
+        nums = [a for a in rest if not a.startswith("--")]
+        n_features = int(nums[0]) if len(nums) > 0 else DEFAULT_N_FEATURES
+        ridge_lambda = float(nums[1]) if len(nums) > 1 else DEFAULT_RIDGE_LAMBDA
+        lb = LiraBinary(path)
+        oip = OpenInjectionProtocol(lb)
+        compiler = KnowledgeCompiler(lb, n_features=n_features, ridge_lambda=ridge_lambda)
+        try:
+            report = compiler.compile_category(categoria, oip, force_recompile=force)
+        except ValueError as e:
+            print(f"Erro: {e}"); sys.exit(1)
+        print(f"[+] Categoria '{categoria}' compilada em parâmetros reais:")
+        print(f"    exemplos usados (total)... {report['n_examples']}")
+        print(f"    novas entradas............ {report['n_novas_entradas']}")
+        print(f"    reaproveitadas (antigas).. {report['n_reaproveitadas']}")
+        if report["entradas_antigas_perdidas"]:
+            print(f"    ATENÇÃO: {report['entradas_antigas_perdidas']} entradas antigas não puderam "
+                  f"ser recuperadas (compiladas por versão anterior sem payload de perguntas).")
+        print(f"    ajuste médio (cosseno).... {report['mean_cosine_fit']:.4f}")
+        print(f"    bytes texto cru (antes)... {report['bytes_texto_cru_antes']}")
+        print(f"    bytes índice (depois)..... {report['bytes_indice_compacto_depois']}")
+        print(f"    bytes parâmetro W......... {report['bytes_parametro_W']}")
+        print(f"    bytes vetores-resposta.... {report['bytes_answer_vectors']}")
+        print(f"    bytes payload comprimido.. {report['bytes_payload_comprimido']}")
+        lb.close()
+
+    elif cmd == "compile-all-knowledge":
+        if OpenInjectionProtocol is None or KnowledgeCompiler is None:
+            print("Erro: lira_open_injection ou lira_knowledge_compiler não encontrados."); sys.exit(1)
+        if len(sys.argv) < 3:
+            print("Erro: Uso: lira compile-all-knowledge <arquivo.lira> [n_features] [ridge_lambda]")
+            sys.exit(1)
+        path = sys.argv[2]
+        n_features = int(sys.argv[3]) if len(sys.argv) > 3 else DEFAULT_N_FEATURES
+        ridge_lambda = float(sys.argv[4]) if len(sys.argv) > 4 else DEFAULT_RIDGE_LAMBDA
+        lb = LiraBinary(path)
+        oip = OpenInjectionProtocol(lb)
+        compiler = KnowledgeCompiler(lb, n_features=n_features, ridge_lambda=ridge_lambda)
+        categorias = oip.list_knowledge_categories()
+        if not categorias:
+            print("Nenhuma categoria de conhecimento (em texto) encontrada para compilar.")
+        for categoria in categorias:
+            entradas = oip.read_category(categoria)
+            # já compilada? (entradas trocadas por índice trazem 'compiled_into')
+            if entradas and all("compiled_into" in e for e in entradas):
+                print(f"[-] '{categoria}' já está compilada, pulando.")
+                continue
+            try:
+                report = compiler.compile_category(categoria, oip)
+            except ValueError:
+                continue
+            print(f"[+] '{categoria}': {report['n_examples']} exemplos -> "
+                  f"parâmetro W ({report['bytes_parametro_W']} bytes), "
+                  f"ajuste médio {report['mean_cosine_fit']:.4f}")
+        lb.close()
+
+    elif cmd == "query-knowledge":
+        if OpenInjectionProtocol is None or KnowledgeCompiler is None:
+            print("Erro: lira_open_injection ou lira_knowledge_compiler não encontrados."); sys.exit(1)
+        if len(sys.argv) < 5:
+            print("Erro: Uso: lira query-knowledge <arquivo.lira> <categoria> <pergunta> [top_k]")
+            sys.exit(1)
+        path, categoria, pergunta = sys.argv[2], sys.argv[3], sys.argv[4]
+        top_k = int(sys.argv[5]) if len(sys.argv) > 5 else 1
+        lb = LiraBinary(path)
+        compiler = KnowledgeCompiler(lb)
+        try:
+            resultados = compiler.query(categoria, pergunta, top_k=top_k)
+        except KeyError as e:
+            print(f"Erro: {e}"); sys.exit(1)
+        for r in resultados:
+            print(f"[sim={r['cosine_similarity']:.4f}] {r['answer']}  (id={r['answer_id']})")
+        lb.close()
+
+    elif cmd == "schema":
+        if OpenInjectionProtocol is None:
+            print("Erro: lira_open_injection não encontrado."); sys.exit(1)
+        if len(sys.argv) < 3:
+            print("Erro: Especifique o caminho de saída."); sys.exit(1)
+        out = write_schema(sys.argv[2])
+        print(f"[+] Schema LKIF gravado em {out}")
+
+    else:
+        print(f"Comando desconhecido: {cmd}")
+
+if __name__ == "__main__":
+    main()

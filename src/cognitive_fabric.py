@@ -274,6 +274,7 @@ class CognitiveFabric:
             if not candidates:
                 decision = Decision(self.cycle_count, None, 0.0, ["sem ações candidatas"])
                 step.method_result = "Nenhuma ação candidata disponível"
+                step.metacognition["strategy_adopted"] = "experimental"
                 self.lira.add_step(step)
                 return decision
 
@@ -281,16 +282,27 @@ class CognitiveFabric:
             ranked.sort(key=lambda item: (item[0][0], item[1].action_id), reverse=True)
             (score, reasons), selected = ranked[0]
             
-            step.interpretation = f"Priorizando {selected.name} entre {len(candidates)} opções"
+            # Lógica de Metacognição
+            confidence = _clamp(score / 2.0 + 0.5)
+            strategy = "immediate"
+            if confidence < 0.4:
+                strategy = "deep"
+            elif confidence < 0.7:
+                strategy = "careful"
+            
+            step.metacognition = {
+                "confidence": confidence,
+                "uncertainty_source": "baixa ativação de conceitos" if confidence < 0.5 else "competição de objetivos",
+                "strategy_adopted": strategy,
+                "self_correction_applied": False
+            }
+            
+            step.interpretation = f"Priorizando {selected.name} (Estratégia: {strategy}) entre {len(candidates)} opções"
             step.hypotheses = [f"Ação {a.name} pode atingir {a.expected}" for a in candidates[:3]]
             step.decision_reason = "; ".join(reasons)
             
             agent = self._select_agent(selected.capability)
             delegated_to = agent.agent_id if agent else None
-            if delegated_to:
-                reasons.append(f"delegável para {delegated_to}")
-            else:
-                reasons.append("execução local ou agente ainda indisponível")
             
             decision = Decision(
                 cycle=self.cycle_count,
