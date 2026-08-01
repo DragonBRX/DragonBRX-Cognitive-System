@@ -8,48 +8,30 @@ O núcleo ativo **não usa modelo de linguagem, Ollama, API de IA ou serviço ex
 
 ## Princípios
 
-- **Motor próprio:** perceber, integrar, priorizar, decidir, delegar e aprender.
-- **Identidade canônica:** seu nome é `DragonBRX`; descrições de arquitetura não
-  substituem esse nome.
+- **A Livraria de Lira:** O conhecimento é uma livraria infinita. O cérebro não carrega tudo, ele acessa o que precisa no momento exato através de um mapa de endereçamento direto.
+- **Aprendizado Intrínseco:** Não existe "modo treino". Conversar é aprender. Cada interação atualiza os parâmetros do mapa em tempo real.
+- **Elasticidade Temporal:** O sistema adapta seu tempo de pensamento ao hardware disponível. Em dispositivos fracos, ele delibera mais devagar para manter a qualidade.
+- **Cérebro Leve e Eterno:** O *Cognitive Pruning* (Gari Cognitivo) remove o irrelevante, permitindo que o sistema evolua por meses sem ficar pesado ou lento.
+- **Identidade canônica:** seu nome é `DragonBRX`; descrições de arquitetura não substituem esse nome.
 - **Sem modelo central:** nenhuma decisão depende de LLM, SLM ou API.
-- **Memória persistente:** conceitos, relações, experiências, objetivos e resultados.
-- **Arquitetura original:** unidades simbólicas adaptativas em vez de uma cópia de neurônios biológicos.
-- **Distribuição:** notebook como núcleo central e celulares Termux como agentes trabalhadores.
-- **Inspeção:** decisões registram pontuações e motivos; o estado é serializável em JSON.
-- **Segurança:** agentes executam apenas capacidades instaladas e autorizadas localmente.
+- **Arquitetura P-SE-GCA:** Arquitetura Cognitiva Geral Autoevolutiva Persistente baseada no padrão `.lira`.
 
 ## Arquitetura atual
 
 | Componente | Função |
 | --- | --- |
-| `src/cognitive_fabric.py` | Núcleo cognitivo: conceitos, relações, objetivos, memória, escolha, delegação e aprendizagem por resultado |
-| `src/cognitive_system.py` | Mente executiva: conversa, contexto, deliberação, resposta, feedback, ferramentas e evolução |
-| `src/identity_memory.py` | Identidade canônica `DragonBRX`, verificada e persistida no checkpoint e no Lira |
-| `src/datacenter_bridge.py` | Ponte validada entre o núcleo no SSD e o BRX SYSTEM no HD |
-| `src/cognitive_graph.py` | Grafo adaptativo por complexidade, novidade, risco e orçamento de hardware |
-| `src/deliberation_engine.py` | Rascunhos versionados, crítica multidimensional, revisão, descarte e reinício |
-| `src/evolution_engine.py` | Evidências, memória negativa, mapas fragmentados, promoção e rollback |
-| `src/competence_learning.py` | Currículos canceláveis, microexperimentos, transferência e mapas de competência |
-| `src/cognitive_program.py` | Compilação e interpretação restrita de rotas cognitivas tipadas e assinadas |
-| `src/strategy_learner.py` | Preferências contextuais limitadas, com feedback externo de maior peso |
-| `src/tool_ecosystem.py` | Inventário, resolução, criação, instalação e execução de ferramentas |
-| `src/lira_memory.py` | Ponte entre cognição, conhecimento compilado, mapas e skills `.lira` |
-| `src/cognitive_dashboard.py` | Interface visual local para conversa, pensamentos, evolução e ferramentas |
-| `src/resource_governor.py` | Orçamento adaptativo de CPU, RAM, armazenamento e GPU |
-| `src/autonomy_policy.py` | Núcleo imutável de efeitos proibidos sem confinar o agente em sandbox |
-| `src/improvement_lab.py` | Variantes declarativas, avaliações autenticadas, Pareto, canário e rollback atômico |
-| `src/variant_evaluator.py` | Coordenador confiável de campanhas públicas/holdout repetidas |
-| `src/variant_worker.py` | Worker descartável em modo de avaliação sem aprendizado persistente |
-| `src/improvement_lab_cli.py` | Interface do operador para o ciclo de promoção assinado |
-| `src/distributed_runtime.py` | Rede autenticada, leases e retomada entre o núcleo e workers |
-| `src/ios_worker.py` | Worker recuperável para a-Shell no iPhone, com checkpoint e cálculo numérico limitado |
-| `synaptic_storage.c/.h` | Memória sináptica recuperada do projeto original |
-| `vector_memory.c/.h` | Memória vetorial em C recuperada do histórico |
-| `nodeManager.js` | Detecção e classificação de hardware recuperada |
-| `distributedNetworkManager.js` | Protótipo histórico de distribuição em Node.js |
-| `affectiveProcessor.js` | Estado afetivo persistente recuperado |
-| `synapticStorageInterface.js` | Ponte histórica entre Node.js e armazenamento C |
-| `tests/test_cognitive_system.py` | Testes do ciclo cognitivo e protocolo autenticado |
+| `src/lira_core.py` | Núcleo Lira: Persistência binária, linhagem histórica e metacognição |
+| `src/lira_map_indexer.py` | O Mapa: Endereçamento direto de parâmetros em disco (Livraria de Lira) |
+| `src/intrinsic_learner.py` | Aprendizado Intrínseco: Conversão de diálogo em parâmetros binários em tempo real |
+| `src/skill_atlas.py` | Atlas de Skills: Gerenciador de 1.600+ habilidades com contratos e versionamento |
+| `src/knowledge_promoter.py` | Quarentena: Pipeline de promoção de conhecimento (Experimental -> Stable) |
+| `src/cognitive_fabric.py` | Núcleo cognitivo: conceitos, relações, objetivos e Gari Cognitivo (Pruning) |
+| `src/temporal_elasticity.py` | Elasticidade: Ajuste dinâmico do tempo de pensamento ao hardware |
+| `src/autonomous_loop.py` | Motor de Autonomia: Ciclo infinito de pesquisa, rascunho, teste e evolução |
+| `src/research_worker.py` | Pesquisador: Extração de dados científicos e rascunhos originais |
+| `src/coding_worker.py` | Programador: Geração de código funcional baseada em tarefas cognitivas |
+| `src/conversational_bridge.py` | Voz do DragonBRX: Tradução de estados cognitivos para linguagem natural |
+| `tests/test_cognitive_system.py` | Testes da suíte P-SE-GCA (100% OK) |
 
 Os componentes antigos ligados a `llmProcessor`, `cognitiveProcessor`, Ollama, pesquisa web e chamadas HTTP **não foram restaurados**.
 
